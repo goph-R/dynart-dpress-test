@@ -64,10 +64,21 @@ class ContentEntityTest extends TestCase {
     }
 
     /**
-     * `Media` does not exist yet, so the column cannot carry a foreign key until it does.
+     * The featured image references the library, which is why `Media` has to be created by an
+     * earlier migration than `Content` - a CREATE TABLE can only point at a table that exists.
      */
-    public function testTheFeaturedMediaColumnHasNoForeignKeyYet(): void {
-        $this->assertNull($this->column('featured_media_id')->foreignKey);
+    public function testTheFeaturedMediaColumnReferencesMedia(): void {
+        $foreignKey = $this->column('featured_media_id')->foreignKey;
+        $this->assertNotNull($foreignKey);
+        $this->assertSame(\Dynart\Dpress\Entity\Media::class, $foreignKey[0]);
+    }
+
+    /**
+     * Its own row must not vanish when the media does - media is soft deleted precisely so the
+     * history keeps resolving.
+     */
+    public function testTheFeaturedMediaReferenceDoesNotCascade(): void {
+        $this->assertNull($this->column('featured_media_id')->onDelete);
     }
 
     public function testTypesAndStatusesAreDistinct(): void {
