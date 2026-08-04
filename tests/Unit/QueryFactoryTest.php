@@ -9,6 +9,10 @@ use Dynart\Micro\Entities\EntityManagerException;
 use Dynart\Micro\Entities\Query;
 use PHPUnit\Framework\TestCase;
 
+class ExampleQueryBuilder {
+    public function build(array $context): Query { return new Query('Content'); }
+}
+
 /**
  * @covers \Dynart\Dpress\Query\QueryFactory
  */
@@ -50,6 +54,21 @@ class QueryFactoryTest extends TestCase {
     public function testCreateThrowsForAnUnknownName(): void {
         $this->expectException(DpressException::class);
         $this->factory->create('nosuchquery');
+    }
+
+    /**
+     * The builder is resolved through the DI container, so registering the query has to put its
+     * class there - otherwise every caller needs a second Micro::add() and finds out at runtime.
+     */
+    public function testAddRegistersTheBuilderClassInTheContainer(): void {
+        $this->assertFalse(\Dynart\Micro\Micro::hasInterface(ExampleQueryBuilder::class));
+        $this->factory->add('example', [ExampleQueryBuilder::class, 'build']);
+        $this->assertTrue(\Dynart\Micro\Micro::hasInterface(ExampleQueryBuilder::class));
+    }
+
+    public function testAddAcceptsAClosureWithoutTouchingTheContainer(): void {
+        $this->factory->add('closure_query', fn(array $c) => new Query('Content'));
+        $this->assertInstanceOf(Query::class, $this->factory->create('closure_query'));
     }
 
     public function testCreateThrowsWhenTheBuilderReturnsSomethingElse(): void {
