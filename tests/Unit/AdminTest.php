@@ -286,6 +286,8 @@ class AdminTest extends TestCase {
         $this->assertSame([
             Setting::SITE_NAME,
             Setting::SITE_DESCRIPTION,
+            Setting::SITE_LOGO,
+            Setting::SITE_ICON,
             Setting::REGISTRATION_OPEN,
             Setting::POSTS_PER_PAGE,
         ], array_keys(SettingsAdminController::FIELDS));
