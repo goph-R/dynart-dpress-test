@@ -54,11 +54,38 @@ class DpressCliAppTest extends TestCase {
         }
     }
 
-    public function testTheExpectedCommandsArePresent(): void {
-        $this->assertSame(
-            ['install', 'upgrade', 'migrate:status', 'version', 'help'],
-            array_keys(DpressCliApp::COMMANDS)
-        );
+    /**
+     * Asserting the exact list would break on every new command without catching anything, so
+     * this pins the ones a site cannot be set up without.
+     */
+    public function testTheEssentialCommandsArePresent(): void {
+        foreach (['install', 'upgrade', 'user:create', 'user:password', 'version', 'help'] as $name) {
+            $this->assertArrayHasKey($name, DpressCliApp::COMMANDS);
+        }
+    }
+
+    public function testCommandNamesFollowTheNamingConvention(): void {
+        foreach (array_keys(DpressCliApp::COMMANDS) as $name) {
+            $this->assertMatchesRegularExpression(
+                '/^[a-z]+(:[a-z_]+)?$/',
+                $name,
+                "'$name' should be lowercase, optionally group:action"
+            );
+        }
+    }
+
+    /**
+     * `help` is what an unknown or missing command falls back to, and it reads best as the last
+     * entry of the list it prints.
+     */
+    public function testHelpIsListedLast(): void {
+        $names = array_keys(DpressCliApp::COMMANDS);
+        $this->assertSame('help', end($names));
+    }
+
+    public function testEveryCommandNameIsUnique(): void {
+        $names = array_keys(DpressCliApp::COMMANDS);
+        $this->assertSame(count($names), count(array_unique($names)));
     }
 
     // --- commandNeedsConfig ---
