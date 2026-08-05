@@ -159,4 +159,58 @@ class MediaTest extends TestCase {
         $media->title = 'A sunset';
         $this->assertSame('A sunset', $media->label());
     }
+
+    // --- the uploads .htaccess ---
+
+    /**
+     * Apache does not skip a directive it does not know
+     *
+     * It refuses the whole directory, with a 500 and `Invalid command` in the log. `php_flag`
+     * belongs to mod_php and `Header` to mod_headers, so an unguarded one turned every image on
+     * a PHP-FPM site into a server error - and the file is written once at install, so there
+     * was no way back out of it either.
+     */
+    public function testEveryModuleDirectiveIsGuarded(): void {
+        $depth = 0;
+        $unguarded = [];
+        foreach (explode("\n", MediaStorage::PROTECTION) as $line) {
+            $line = trim($line);
+            if (str_starts_with($line, '<IfModule')) {
+                $depth++;
+                continue;
+            }
+            if ($line === '</IfModule>') {
+                $depth--;
+                continue;
+            }
+            $needsModule = str_starts_with($line, 'php_flag') || str_starts_with($line, 'php_value')
+                || str_starts_with($line, 'Header');
+            if ($needsModule && $depth === 0) {
+                $unguarded[] = $line;
+            }
+        }
+        $this->assertSame(0, $depth, 'an <IfModule> is not closed');
+        $this->assertSame([], $unguarded, 'a directive outside <IfModule> 500s the whole folder');
+    }
+
+    /**
+     * The lock that does not depend on a module being loaded
+     *
+     * `php_flag engine off` does nothing under FPM even when it is guarded, so refusing to
+     * serve those files at all is what actually stops an uploaded `.php` being a remote shell.
+     * It must stay outside every `<IfModule>`.
+     */
+    public function testExecutablesAreRefusedWhateverModulesAreLoaded(): void {
+        $rule = MediaStorage::PROTECTION;
+        $this->assertMatchesRegularExpression(
+            '#<FilesMatch "\\\\\.\(php\|[^"]*"\>\s*\n\s*Require all denied#',
+            $rule,
+            'the deny rule is not where it was'
+        );
+        foreach (['php', 'phtml', 'phar', 'cgi', 'htaccess'] as $extension) {
+            $this->assertStringContainsString($extension, $rule, "$extension is not refused");
+        }
+        // the deny block starts at column 0, so nothing indented it into an <IfModule>
+        $this->assertStringContainsString("\n<FilesMatch", $rule);
+    }
 }
