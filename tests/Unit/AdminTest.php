@@ -195,6 +195,29 @@ class AdminTest extends TestCase {
         return $factory;
     }
 
+    /**
+     * An action that answers with data hands back the token for the next one
+     *
+     * `Form::process()` mints a fresh token every time it runs and stores it in the session, so
+     * validating one action spends the one printed on the page. That is invisible while every
+     * action reloads the page, and fatal for two in a row without one - uploading a file and
+     * then attaching it was refused as a forgery, and the message blamed the attach.
+     */
+    public function testAnActionAnswerCarriesTheNextToken(): void {
+        $controller = (new ReflectionClass(DashboardController::class))->newInstanceWithoutConstructor();
+        $property = (new ReflectionClass(AbstractAdminController::class))->getProperty('forms');
+        $property->setAccessible(true);
+        $property->setValue($controller, $this->factory());
+
+        $method = new ReflectionMethod(AbstractAdminController::class, 'answer');
+        $method->setAccessible(true);
+        $answer = $method->invoke($controller, ['item' => 'something']);
+
+        $this->assertSame('something', $answer['item'], 'the answer lost what it was answering');
+        $this->assertArrayHasKey('csrf', $answer);
+        $this->assertNotSame('', $answer['csrf']);
+    }
+
     public function testEveryAdminFormIsRegistered(): void {
         $factory = $this->factory();
         foreach ([AdminForms::CONTENT, AdminForms::CATEGORY, AdminForms::TAG, AdminForms::MEDIA,
