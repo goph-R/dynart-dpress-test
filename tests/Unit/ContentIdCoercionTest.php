@@ -99,6 +99,11 @@ class ContentIdCoercionTest extends TestCase {
      * The form also carries its token, the tag string and the category boxes. None of those are
      * columns, and neither is whatever a plugin adds - a plugin that wants to write to the entity
      * does it through the service on `after_process`, not by having a field named like a column.
+     *
+     * **`status` is not here either**, though it is a column. It used to be, and that was the
+     * bug: `create()` honoured it without asking whether this person may publish, while
+     * `update()` ignored it entirely, so the same select published a new post and did nothing
+     * to an existing one. It goes through `applyStatus()` now, which asks both questions.
      */
     public function testOnlyContentColumnsGetThrough(): void {
         $data = $this->contentData([
@@ -107,7 +112,7 @@ class ContentIdCoercionTest extends TestCase {
             'author_id' => '999', 'myplugin_field' => 'x',
         ]);
         $this->assertSame(
-            ['title', 'markdown', 'slug', 'status'],
+            ['title', 'markdown', 'slug'],
             array_keys($data),
             'something that is not a content column reached the entity'
         );

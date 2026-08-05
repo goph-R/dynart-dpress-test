@@ -226,6 +226,71 @@ class AdminTest extends TestCase {
     }
 
     /**
+     * The status select is only for somebody who may publish this kind of content
+     *
+     * The stock `editor` role holds `post.publish` but not `page.publish`, so this is not a
+     * hypothetical: without the check that role got a select on the page editor that the server
+     * then ignored, and the screen said "Saved." while nothing moved.
+     */
+    public function testTheStatusFieldIsOnlyOfferedToSomebodyWhoMayPublish(): void {
+        $factory = $this->factory();
+        $allowed = $factory->create(AdminForms::CONTENT, ['is_page' => false, 'can_publish' => true]);
+        $this->assertArrayHasKey('status', $allowed->fields());
+
+        $refused = $factory->create(AdminForms::CONTENT, ['is_page' => false, 'can_publish' => false]);
+        $this->assertArrayNotHasKey('status', $refused->fields());
+        // and the rest of the editor is untouched - this hides one field, it does not lock the screen
+        $this->assertArrayHasKey('title', $refused->fields());
+        $this->assertArrayHasKey('markdown', $refused->fields());
+        $this->assertArrayHasKey('featured_media_id', $refused->fields());
+    }
+
+    /**
+     * What the editor's status select has to do to the content behind it
+     *
+     * `ContentService::update()` ignores `status` on purpose - becoming visible sets
+     * `published_at` and is what a feed or a plugin listens for, so it goes through
+     * `publish()` / `unpublish()`. The editor used to hand `status` to `update()` anyway, which
+     * meant the select did nothing at all: "Saved.", still a draft.
+     */
+    public function testTheStatusSelectDecidesBetweenPublishingAndNothing(): void {
+        $change = new ReflectionMethod(ContentAdminController::class, 'statusChange');
+        $change->setAccessible(true);
+        $controller = (new ReflectionClass(ContentAdminController::class))->newInstanceWithoutConstructor();
+
+        $draft = Content::STATUS_DRAFT;
+        $published = Content::STATUS_PUBLISHED;
+        $this->assertSame('publish', $change->invoke($controller, $draft, $published));
+        $this->assertSame('unpublish', $change->invoke($controller, $published, $draft));
+        // saving a published post without touching the select must not re-publish it: that would
+        // move `published_at` and announce it again on every typo fix
+        $this->assertNull($change->invoke($controller, $published, $published));
+        $this->assertNull($change->invoke($controller, $draft, $draft));
+        // and a status nobody offered is not a third state to move to
+        $this->assertNull($change->invoke($controller, $draft, 'archived'));
+        $this->assertNull($change->invoke($controller, $published, ''));
+    }
+
+    /**
+     * `status` must not travel with the ordinary fields
+     *
+     * `ContentService::create()` honours whatever it is given, so a status that reached it
+     * through this array published a new post without anybody checking the permission.
+     */
+    public function testTheEditedFieldsDoNotCarryTheStatus(): void {
+        $method = new ReflectionMethod(ContentAdminController::class, 'contentData');
+        $method->setAccessible(true);
+        $controller = (new ReflectionClass(ContentAdminController::class))->newInstanceWithoutConstructor();
+        $data = $method->invoke($controller, [
+            'title' => 'A title', 'markdown' => 'text', 'slug' => 'a-title',
+            'status' => Content::STATUS_PUBLISHED, 'featured_media_id' => '',
+        ]);
+        $this->assertArrayNotHasKey('status', $data);
+        $this->assertSame('A title', $data['title']);
+        $this->assertNull($data['featured_media_id']);
+    }
+
+    /**
      * Only the title and the markdown are required: a slug is made from the title and a status
      * has a default, so demanding them would be asking for what the CMS already knows
      */
