@@ -86,8 +86,8 @@ class AdminPartialTest extends TestCase {
      * would have contained.
      */
     public function testTheFragmentLayoutIsTheOneTheFullLayoutFetches(): void {
-        $partial = str_replace(Dpress::VIEW_NAMESPACE.':', '', AbstractAdminController::LAYOUT_PARTIAL);
-        $this->assertFileExists(Dpress::viewsPath().'/'.$partial.'.phtml');
+        $partial = str_replace(Dpress::ADMIN_VIEW_NAMESPACE.':', '', AbstractAdminController::LAYOUT_PARTIAL);
+        $this->assertFileExists(Dpress::viewsPath().'/admin/'.$partial.'.phtml');
         $layout = file_get_contents(Dpress::viewsPath().'/admin/layout.phtml');
         $this->assertStringContainsString(
             "\$this->fetch('".AbstractAdminController::LAYOUT_PARTIAL."')", $layout,
@@ -126,6 +126,7 @@ class AdminPartialTest extends TestCase {
     public function testTheFragmentIsOneMainElementAndNoDocument(): void {
         $view = new View(new StubConfig());
         $view->addFolder(Dpress::VIEW_NAMESPACE, Dpress::viewsPath());
+        $view->addFolder(Dpress::ADMIN_VIEW_NAMESPACE, Dpress::viewsPath().'/admin', false);
         $view->set('page_title', 'Posts – dpress');
         $view->set('admin_section', 'content');
         $view->set('notice', 'Saved.');
@@ -154,6 +155,58 @@ class AdminPartialTest extends TestCase {
             'data-action-form', file_get_contents(Dpress::viewsPath().'/admin/layout.phtml'),
             'a form left outside the swapped part keeps a token the server has already replaced'
         );
+    }
+
+    // --- the admin is not a theme's to change ---
+
+    /**
+     * A theme is for the site's pages, and the admin is not one of them
+     *
+     * A theme replacing `single.phtml` is the whole point of themes. A theme replacing the
+     * admin's layout is not a restyled page, it is somebody locked out of their own site - and
+     * before this the second was as easy as the first, because a theme override applied to every
+     * namespace there was.
+     */
+    public function testAThemeCannotReplaceAnAdminTemplate(): void {
+        $view = new View(new StubConfig());
+        $view->addFolder(Dpress::VIEW_NAMESPACE, Dpress::viewsPath());
+        $view->addFolder(Dpress::ADMIN_VIEW_NAMESPACE, Dpress::viewsPath().'/admin', false);
+
+        $this->assertTrue($view->isThemeable(Dpress::VIEW_NAMESPACE), 'the front end stopped being themeable');
+        $this->assertFalse($view->isThemeable(Dpress::ADMIN_VIEW_NAMESPACE));
+    }
+
+    /**
+     * Every admin template is fetched through the namespace that refuses theming
+     *
+     * One left on `dpress:admin/...` would still resolve - the files are in the same folder - and
+     * would silently be themeable again, which is the kind of hole nobody notices until a theme
+     * takes the admin down.
+     */
+    public function testNoAdminTemplateIsFetchedThroughTheThemeableNamespace(): void {
+        $files = array_merge(
+            glob(Dpress::path('src').'/Controller/Admin/*.php'),
+            glob(Dpress::viewsPath().'/admin/*.phtml'),
+            glob(Dpress::viewsPath().'/admin/*/*.phtml')
+        );
+        foreach ($files as $file) {
+            $this->assertStringNotContainsString(
+                Dpress::VIEW_NAMESPACE.':admin/', file_get_contents($file),
+                basename($file).' reaches an admin template through the themeable namespace'
+            );
+        }
+        $this->assertGreaterThan(20, count($files), 'the admin files were not found at all');
+    }
+
+    /**
+     * The icons are files, not templates
+     *
+     * They hold no PHP, so calling them templates bought one thing: a theme could replace them.
+     */
+    public function testTheIconsAreNotTemplates(): void {
+        $this->assertFileExists(Dpress::iconsPath().'/section.svg', 'the fallback icon is missing');
+        $this->assertSame([], glob(Dpress::viewsPath().'/admin/icon-*.phtml'), 'an icon is still a template');
+        $this->assertGreaterThan(10, count(glob(Dpress::iconsPath().'/*.svg')));
     }
 
     // --- what the first page of a list is fetched with ---

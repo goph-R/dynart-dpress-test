@@ -31,7 +31,8 @@ class StubView implements ViewInterface {
     public function block(string $name): string { return ''; }
     public function startBlock(string $name): void {}
     public function endBlock(): void {}
-    public function addFolder(string $namespace, string $path): void {}
+    public function addFolder(string $namespace, string $path, bool $themeable = true): void {}
+    public function isThemeable(string $namespace): bool { return true; }
     public function folder(string $namespace): string { return ''; }
     public function setTheme(string $path): void {}
     public function theme(): string { return ''; }
