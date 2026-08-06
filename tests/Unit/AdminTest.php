@@ -13,6 +13,7 @@ use Dynart\Dpress\Controller\Admin\SettingsAdminController;
 use Dynart\Dpress\Controller\Admin\TaxonomyAdminController;
 use Dynart\Dpress\Controller\Admin\UserAdminController;
 use Dynart\Dpress\Dpress;
+use Dynart\Dpress\DpressServices;
 use Dynart\Dpress\DpressWebApp;
 use Dynart\Dpress\Entity\Content;
 use Dynart\Dpress\Entity\Setting;
@@ -23,6 +24,7 @@ use Dynart\Dpress\Query\ListRequest;
 use Dynart\Dpress\Test\RecordingEvents;
 use Dynart\Dpress\Test\StubTranslation;
 use Dynart\Micro\Attribute\Authorize;
+use Dynart\Micro\FormWidgets;
 use Dynart\Micro\Attribute\Route;
 use Dynart\Micro\Request;
 use Dynart\Micro\Session;
@@ -421,10 +423,34 @@ class AdminTest extends TestCase {
     }
 
     /**
-     * The CMS renders its own field types, and falls through to the framework for the rest
+     * The CMS registers its field types the way a plugin registers one
+     *
+     * It used to point `DpressForm::VIEW_INPUT` at a template holding all four, which worked
+     * exactly once: the override was spent, and nothing after the CMS could add a fifth. Now they
+     * go through `FormWidgets` — and the reason to assert it here is that the core has to keep
+     * eating its own mechanism, or nobody notices the day it breaks for somebody else's code.
      */
-    public function testTheFormUsesTheCmsInputPartial(): void {
-        $this->assertSame('dpress:form-input', DpressForm::VIEW_INPUT);
+    public function testTheCmsFieldTypesAreRegisteredWidgetsWithTemplatesThatExist(): void {
+        $widgets = new FormWidgets();
+        DpressServices::registerWidgets($widgets);
+        foreach (['markdown', 'media', 'checkboxes', 'permissions'] as $type) {
+            $this->assertTrue($widgets->has($type), "'$type' is not registered");
+            $template = str_replace(Dpress::VIEW_NAMESPACE.':', '', $widgets->view($type));
+            $this->assertFileExists(Dpress::viewsPath().'/'.$template.'.phtml');
+        }
+        // the framework's own seven are still there, so `text` did not stop working
+        $this->assertTrue($widgets->has('select'));
+    }
+
+    public function testTheOldCmsInputPartialIsGone(): void {
+        $this->assertFileDoesNotExist(
+            Dpress::viewsPath().'/form-input.phtml',
+            'the if/elseif chain is still there, so there are two ways to add a field type'
+        );
+        $this->assertFalse(
+            defined(DpressForm::class.'::VIEW_INPUT'),
+            'VIEW_INPUT is back, and with it the one-contributor limit it imposes'
+        );
     }
 
     // --- the sortable whitelists ---
