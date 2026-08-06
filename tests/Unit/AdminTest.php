@@ -178,13 +178,52 @@ class AdminTest extends TestCase {
             foreach ((new ReflectionClass($className))->getMethods(ReflectionMethod::IS_PUBLIC) as $method) {
                 foreach ($method->getAttributes(Route::class) as $attribute) {
                     $route = $attribute->newInstance();
-                    if (!preg_match('#/(delete|publish|unpublish|restore)/#', $route->path.'/')) {
+                    // `delete-selected` before `delete`, or the alternation matches the prefix
+                    // and the group routes - the ones that remove many rows at once - go
+                    // unchecked, which is the wrong way round
+                    if (!preg_match('#/(delete-selected|delete|publish|unpublish|restore)/#', $route->path.'/')) {
                         continue;
                     }
                     $this->assertSame('POST', $route->method, $route->path.' changes something over '.$route->method);
                 }
             }
         }
+    }
+
+    /**
+     * Every list that can delete has somewhere to send a selection
+     *
+     * The button is a URL in a JSON blob and the endpoint is an attribute on a method, and
+     * nothing connects the two until somebody clicks it. A typo in either is a 404 *after* the
+     * confirm dialog said yes - which reads as "it deleted them and lost the page".
+     *
+     * Row deletes used to carry this: `/delete/?` existed for every list because every row had a
+     * button. The buttons are gone, so this is the list that has to be kept.
+     */
+    public function testEveryListCanDeleteASelection(): void {
+        $expected = [
+            '/admin/content/?/delete-selected',
+            '/admin/media/delete-selected',
+            '/admin/categories/delete-selected',
+            '/admin/tags/delete-selected',
+            '/admin/menus/delete-selected',
+            '/admin/users/delete-selected',
+            '/admin/roles/delete-selected',
+        ];
+        $found = [];
+        foreach (self::ADMIN_CONTROLLERS as $className) {
+            foreach ((new ReflectionClass($className))->getMethods(ReflectionMethod::IS_PUBLIC) as $method) {
+                foreach ($method->getAttributes(Route::class) as $attribute) {
+                    $route = $attribute->newInstance();
+                    if (str_ends_with($route->path, '/delete-selected')) {
+                        $found[] = $route->path;
+                    }
+                }
+            }
+        }
+        sort($expected);
+        sort($found);
+        $this->assertSame($expected, $found);
     }
 
     // --- the forms ---
