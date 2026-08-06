@@ -4,6 +4,7 @@ namespace Dynart\Dpress\Test\Unit;
 
 use Dynart\Dpress\Content\MarkdownRenderer;
 use Dynart\Dpress\Test\RecordingEvents;
+use League\CommonMark\Environment\EnvironmentBuilderInterface;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -117,5 +118,35 @@ class MarkdownRendererTest extends TestCase {
     public function testNoEventsForAnEmptyString(): void {
         $this->renderer->render('');
         $this->assertSame([], $this->events->emitted);
+    }
+
+    /**
+     * The seam the CMS reaches the renderer through
+     *
+     * This class knows nothing about media or posts, and resolving `media#12` needs both. So the
+     * environment is handed out before the converter is sealed, and a subscriber adds what it
+     * needs. Emitted lazily, on the first render - which on a page view never happens, because
+     * the HTML was written at save time.
+     */
+    public function testTheEnvironmentIsOfferedBeforeTheConverterIsBuilt(): void {
+        $seen = null;
+        $this->events->subscribe(MarkdownRenderer::EVENT_ENVIRONMENT, function ($environment) use (&$seen) {
+            $seen = $environment;
+        });
+        $this->assertSame([], $this->events->emitted, 'the converter was built before anything asked for one');
+        $this->renderer->render('hello');
+        $this->assertInstanceOf(EnvironmentBuilderInterface::class, $seen);
+    }
+
+    /**
+     * Built once and kept, so a subscriber cannot be handed a second environment that the
+     * converter in use knows nothing about
+     */
+    public function testTheEnvironmentIsOfferedOnlyOnce(): void {
+        $this->renderer->render('one');
+        $this->renderer->render('two');
+        $this->assertSame(
+            1, count(array_filter($this->events->emitted, fn($e) => $e === MarkdownRenderer::EVENT_ENVIRONMENT))
+        );
     }
 }
