@@ -179,4 +179,66 @@ class TreeOrderTest extends TestCase {
         $this->expectException(DpressException::class);
         $tree->move(Category::class, 99, null, 0);
     }
+
+    // --- the flat kind ---
+
+    /**
+     * A sidebar is a list, not a tree, and blocks have no `parent_id` at all - but the rule that
+     * matters is the same one, so it is the same code: what comes out is `0, 1, 2, …` over the
+     * whole list, never a nudge
+     */
+    public function testAFlatListRenumbersFromTheTop(): void {
+        $tree = $this->flat();
+        $tree->moveFlat(Category::class, 3, 0);
+        $this->assertSame([3, 1, 2], $this->db->order(null));
+        $this->assertSame([0, 1, 2], [
+            $this->db->nodes[3]->position, $this->db->nodes[1]->position, $this->db->nodes[2]->position,
+        ]);
+    }
+
+    public function testAFlatMoveToTheEnd(): void {
+        $tree = $this->flat();
+        $tree->moveFlat(Category::class, 1, 2);
+        $this->assertSame([2, 3, 1], $this->db->order(null));
+    }
+
+    /**
+     * A drop past the end of the list is a drop at the end, not an error and not a gap: the
+     * browser counts rows and the server is the one that decides what a list looks like
+     */
+    public function testAPositionBeyondTheEndIsClampedRatherThanRefused(): void {
+        $tree = $this->flat();
+        $tree->moveFlat(Category::class, 1, 99);
+        $this->assertSame([2, 3, 1], $this->db->order(null));
+    }
+
+    public function testANegativePositionIsTheTop(): void {
+        $tree = $this->flat();
+        $tree->moveFlat(Category::class, 2, -5);
+        $this->assertSame([2, 1, 3], $this->db->order(null));
+    }
+
+    /**
+     * Deleting from a list, or moving something out of it, leaves a gap that nothing else closes
+     */
+    public function testRenumberingAListThatSomethingLeft(): void {
+        $tree = $this->flat();
+        unset($this->db->nodes[2]);
+        $tree->renumberFlat(Category::class, [1, 3]);
+        $this->assertSame([0, 1], [$this->db->nodes[1]->position, $this->db->nodes[3]->position]);
+    }
+
+    /**
+     * Three at the top level and nothing nested, which is the shape of a place
+     */
+    private function flat(): TreeOrder {
+        $this->db = new FakeTree();
+        $this->db->add(1, null, 0);
+        $this->db->add(2, null, 1);
+        $this->db->add(3, null, 2);
+        $em = $this->createMock(EntityManager::class);
+        $em->method('safeTableName')->willReturn('`dp_block`');
+        $em->method('findById')->willReturnCallback(fn($className, $id) => $this->db->nodes[(int)$id] ?? null);
+        return new TreeOrder($em, $this->db);
+    }
 }

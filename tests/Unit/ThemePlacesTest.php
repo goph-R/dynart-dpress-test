@@ -94,4 +94,24 @@ class ThemePlacesTest extends TestCase {
         $this->assertStringContainsString("\$this->menu('main')", $source);
         $this->assertArrayHasKey('main', ThemeService::BUILT_IN_PLACES);
     }
+
+    /**
+     * The second built-in place, and the same rule as the first: it is declared because the
+     * layout renders it. A place the editors offer and nothing draws is a promise the site
+     * quietly breaks.
+     */
+    public function testTheBuiltInLayoutDeclaresTheSidebarItRenders(): void {
+        $this->assertArrayHasKey('sidebar', ThemeService::BUILT_IN_PLACES);
+        $layout = file_get_contents(\Dynart\Dpress\Dpress::path('views/layout.phtml'));
+        $this->assertStringContainsString("\$places->render('sidebar')", $layout);
+    }
+
+    /**
+     * A place is one idea rather than two: whatever is put there renders, menu or blocks. The
+     * header declares `main`, so what somebody puts in `main` has to come out of it.
+     */
+    public function testWhatIsPutInTheHeaderPlaceIsRenderedThere(): void {
+        $layout = file_get_contents(\Dynart\Dpress\Dpress::path('views/layout.phtml'));
+        $this->assertStringContainsString("\$places->blocks('main')", $layout);
+    }
 }
