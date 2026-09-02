@@ -22,6 +22,9 @@ class StubDatabase extends Database {
     /** What the next `fetchOne()` returns, in order; the last one repeats */
     public array $answers = [];
 
+    /** What every `fetchColumn()` returns */
+    public array $column = [];
+
     public function __construct(?ConfigInterface $config = null) {
         parent::__construct($config ?? new StubConfig(), new StubLogger(), new PdoBuilder());
     }
@@ -44,6 +47,11 @@ class StubDatabase extends Database {
     public function fetchOne(string $query, array $params = []): mixed {
         $this->queries[] = ['sql' => $query, 'params' => $params];
         return count($this->answers) > 1 ? array_shift($this->answers) : ($this->answers[0] ?? 0);
+    }
+
+    public function fetchColumn(string $query, array $params = []): array {
+        $this->queries[] = ['sql' => $query, 'params' => $params];
+        return $this->column;
     }
 
     public function lastInsertId(?string $name = null): string|false {
