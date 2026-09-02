@@ -193,36 +193,40 @@ class AdminTest extends TestCase {
     }
 
     /**
-     * Every list that can delete has somewhere to send a selection
+     * Every list removes things a row at a time, and none of them in bulk
      *
-     * The button is a URL in a JSON blob and the endpoint is an attribute on a method, and
+     * The buttons went the other way once. 0.21.0 took the row deletes out and put *Delete
+     * selected* in; 0.31.0 put them back and took bulk delete out again, because it cost a
+     * checkbox column on every screen and a bar above every list for the most dangerous operation
+     * in the admin behind a single confirm - and the case for it, a library full of files
+     * uploaded by mistake, is the case `media:delete` and a shell loop already answer.
+     *
+     * A row action is a URL in a JSON blob and its endpoint is an attribute on a method, and
      * nothing connects the two until somebody clicks it. A typo in either is a 404 *after* the
-     * confirm dialog said yes - which reads as "it deleted them and lost the page".
-     *
-     * Row deletes used to carry this: `/delete/?` existed for every list because every row had a
-     * button. The buttons are gone, so this is the list that has to be kept.
-     *
-     * **Categories are not on it.** That screen stopped being a dynamic list in 0.29.0 and became
-     * a tree table you drag rows around, which offers nothing to select - so a `delete-selected`
-     * there would be an endpoint with no way to reach it. Its rows have their own delete button,
-     * the way the menu items screen has always had.
+     * confirm said yes, which reads as "it deleted it and lost the page".
      */
-    public function testEveryListCanDeleteASelection(): void {
+    public function testEveryListDeletesARowAtATime(): void {
         $expected = [
-            '/admin/content/?/delete-selected',
-            '/admin/media/delete-selected',
-            '/admin/tags/delete-selected',
-            '/admin/menus/delete-selected',
-            '/admin/users/delete-selected',
-            '/admin/roles/delete-selected',
+            '/admin/content/?/delete/?',
+            '/admin/media/delete/?',
+            '/admin/categories/delete/?',
+            '/admin/tags/delete/?',
+            '/admin/menus/delete/?',
+            '/admin/menus/items/delete/?',
+            '/admin/users/delete/?',
+            '/admin/roles/delete/?',
         ];
         $found = [];
         foreach (self::ADMIN_CONTROLLERS as $className) {
             foreach ((new ReflectionClass($className))->getMethods(ReflectionMethod::IS_PUBLIC) as $method) {
                 foreach ($method->getAttributes(Route::class) as $attribute) {
-                    $route = $attribute->newInstance();
-                    if (str_ends_with($route->path, '/delete-selected')) {
-                        $found[] = $route->path;
+                    $path = $attribute->newInstance()->path;
+                    $this->assertStringNotContainsString(
+                        'delete-selected', $path,
+                        "$path is a bulk delete, and there is no way left in the admin to reach one"
+                    );
+                    if (str_ends_with($path, '/delete/?')) {
+                        $found[] = $path;
                     }
                 }
             }
@@ -230,6 +234,17 @@ class AdminTest extends TestCase {
         sort($expected);
         sort($found);
         $this->assertSame($expected, $found);
+    }
+
+    /**
+     * Selecting rows is still there, for the one thing it is good at
+     *
+     * Enabling six plugins at once is a real act; deleting six things at once is a mistake
+     * waiting for somewhere to happen.
+     */
+    public function testThePluginsScreenKeepsItsGroupActions(): void {
+        $source = file_get_contents(Dpress::path('src/Controller/Admin/PluginAdminController.php'));
+        $this->assertStringContainsString("'groupActions' => \$this->groupActions()", $source);
     }
 
     // --- the forms ---
