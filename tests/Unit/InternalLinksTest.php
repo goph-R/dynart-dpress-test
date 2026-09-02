@@ -229,32 +229,33 @@ class InternalLinksTest extends TestCase {
     /**
      * The editor and the renderer have to spell it the same way
      *
-     * Two places write a reference - the insert button in `admin.js` and the panel's reference
-     * column - and one place reads it. Nothing at runtime connects them, so a prefix renamed on
-     * one side would go on inserting references that quietly resolve to nothing.
+     * One place writes a reference - `Dpress.insertMedia()`, behind both the toolbar button and
+     * the attachment list's insert action - and one place reads it. Nothing at runtime connects
+     * them, so a prefix renamed on one side would go on inserting references that quietly
+     * resolve to nothing.
      */
     public function testTheEditorWritesSomethingThisCanRead(): void {
         $this->assertSame(1, preg_match(InternalLinks::PATTERN, 'media#1'));
-        $sources = [
-            'assets/admin.js' => "](media#' + item.id",
-            'src/Controller/Admin/ContentAdminController.php' => "'media#'.(int)\$media['id']",
-        ];
-        foreach ($sources as $file => $expected) {
-            $this->assertStringContainsString(
-                $expected, file_get_contents(Dpress::path($file)),
-                $file.' no longer writes the reference this reads'
-            );
-        }
+        $this->assertStringContainsString(
+            "](media#' + item.id", file_get_contents(Dpress::path('assets/admin.js')),
+            'admin.js no longer writes the reference this reads'
+        );
     }
 
     /**
-     * The panel has to declare the column, or the rows carry a reference nobody ever sees
+     * Every column the panel declares is a field the rows actually carry
      *
      * The list is built in the browser from a JSON config, so a column and the field behind it
-     * are declared in two places that nothing checks against each other: a column with no field
-     * is a row of blanks, and a field with no column is invisible. Both fail quietly.
+     * are declared in two places that nothing checks against each other, and **a column with no
+     * field is a row of blanks** - no error, no warning, just an empty cell that looks
+     * deliberate. That is precisely how the dashboard's "Recent changes" stayed two-thirds blank
+     * for three releases.
+     *
+     * This used to assert the one column by name. It asserts the agreement instead, which is the
+     * thing that was actually worth pinning: the Reference column could then be removed in
+     * 0.25.3 without touching it, and the next column added is covered the moment it exists.
      */
-    public function testTheAttachmentPanelShowsTheReference(): void {
+    public function testEveryAttachmentColumnHasAFieldBehindIt(): void {
         $controller = (new ReflectionClass(ContentAdminController::class))->newInstanceWithoutConstructor();
         $router = new ReflectionProperty(AbstractController::class, 'router');
         $router->setAccessible(true);
@@ -266,9 +267,31 @@ class InternalLinksTest extends TestCase {
         $content->id = 7;
         $panel = $method->invoke($controller, 'post', $content);
 
-        $this->assertArrayHasKey('ref', $panel['config']['columns']);
+        $columns = array_keys($panel['config']['columns']);
+        $this->assertNotEmpty($columns);
+        foreach ($columns as $column) {
+            $this->assertContains(
+                $column, $this->attachmentRowFields(),
+                "the panel shows a '$column' column and attachmentRows() builds no such field"
+            );
+        }
+    }
+
+    /**
+     * The keys of the row literal in `attachmentRows()`, read out of the source
+     *
+     * Building a row for real wants the media service and a database; the array is a literal and
+     * the question is only what it is called.
+     *
+     * @return string[]
+     */
+    private function attachmentRowFields(): array {
         $source = file_get_contents(Dpress::path('src/Controller/Admin/ContentAdminController.php'));
-        $this->assertStringContainsString("'ref'            => 'media#'", $source, 'no row carries what the column shows');
+        $start = strpos($source, 'foreach ($this->media->attachmentsOf(');
+        $this->assertNotFalse($start, 'attachmentRows() no longer looks like this');
+        $end = strpos($source, 'return $this->rows(', $start);
+        preg_match_all("/'([a-z_]+)'\s*=>/", substr($source, $start, $end - $start), $matches);
+        return $matches[1];
     }
 
     // --- the two guarantees the renderer already made ---
