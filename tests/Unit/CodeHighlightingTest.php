@@ -35,9 +35,31 @@ class CodeHighlightingTest extends TestCase {
 
     public function testTheLanguageIsAnAttributeAndTheColoursAreNotThere(): void {
         $html = $this->render("```php\necho 1;\n```");
-        $this->assertStringContainsString('<pre data-enlighter-language="php">', $html);
-        $this->assertStringContainsString('<code class="language-php">', $html);
+        $this->assertStringContainsString('data-enlighter-language="php"', $html);
+        $this->assertStringContainsString('class="language-php"', $html);
         $this->assertStringNotContainsString('<span', $html, 'a token span was baked into the document');
+    }
+
+    /**
+     * The bug this shipped with: **a highlighted block has no `<code>` inside it**
+     *
+     * EnlighterJS reads the `innerHTML` of the element it matched and unescapes it, so a `<code>`
+     * wrapper is not ignored - it is *displayed as the first line of the code*, tag and all. Its
+     * documented markup is a `<pre>` with the code directly inside.
+     */
+    public function testAHighlightedBlockHasNoCodeElementToLeakIntoTheDisplay(): void {
+        $html = $this->render("```php\necho 1;\n```");
+        $this->assertStringNotContainsString('<code', $html, 'this tag would be shown as code, not as markup');
+        $this->assertStringContainsString('>echo 1;', $html);
+    }
+
+    /**
+     * Every blank line an author wrote is still there. The report that found the `<code>` leak
+     * started as "my blank lines are gone", and this is the half of it that is ours to keep.
+     */
+    public function testBlankLinesInsideABlockSurvive(): void {
+        $html = $this->render("```php\n<?php\n\nclass A {\n\n}\n```");
+        $this->assertStringContainsString("\n\nclass A {\n\n}", $html);
     }
 
     /**
@@ -163,6 +185,16 @@ class CodeHighlightingTest extends TestCase {
         $this->assertNotFalse($link);
         $this->assertNotFalse($style);
         $this->assertGreaterThan($link, $style, 'the correction is before the stylesheet, so it loses');
+    }
+
+    /**
+     * `init(blocks, inline, options)` — the second selector is for inline snippets, and `code`
+     * there rebuilds every backtick span in somebody's prose into a code sample
+     */
+    public function testTheInlineSelectorMatchesNothing(): void {
+        $tags = $this->assets('dracula')->tags();
+        $this->assertStringContainsString('"code.enlighter-inline"', $tags);
+        $this->assertStringNotContainsString('],"code"', $tags, 'every inline code span would be rebuilt');
     }
 
     public function testNothingIsEmittedWhenHighlightingIsOff(): void {
