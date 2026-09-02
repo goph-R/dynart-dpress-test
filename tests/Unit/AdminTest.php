@@ -411,6 +411,22 @@ class AdminTest extends TestCase {
         $this->assertArrayHasKey('theme', $form->fields());
     }
 
+    /**
+     * The logo and the icon are pickable, and still a path
+     *
+     * `asset` rather than `media`, and that is not a detail: a media field stores an **id**, and
+     * `Setting::SITE_LOGO` is deliberately not one. Chrome renders on pages with no content on
+     * them, before anything has been uploaded, and deleting a library item must not be able to
+     * take the header down. So the picker fills a text field with a path, and typing one by hand
+     * still works.
+     */
+    public function testTheBrandingFieldsAreAssetsRatherThanMedia(): void {
+        $fields = $this->factory()->create(AdminForms::SETTINGS, ['themes' => []])->fields();
+        foreach ([Setting::SITE_LOGO, Setting::SITE_ICON] as $name) {
+            $this->assertSame('asset', $fields[$name]['type'] ?? '', "'$name' should be a path, not a media id");
+        }
+    }
+
     public function testTheSettingsScreenOnlyWritesEditableSettings(): void {
         $this->assertSame([
             Setting::SITE_NAME,
@@ -433,10 +449,17 @@ class AdminTest extends TestCase {
     public function testTheCmsFieldTypesAreRegisteredWidgetsWithTemplatesThatExist(): void {
         $widgets = new FormWidgets();
         DpressServices::registerWidgets($widgets);
-        foreach (['markdown', 'media', 'checkboxes', 'permissions'] as $type) {
+        // over the registry rather than over a list written out here, so a widget added later is
+        // covered the moment it exists - a template that is not there renders an HTML comment and
+        // says nothing to anybody looking at the screen
+        $this->assertNotEmpty(DpressServices::WIDGETS);
+        foreach (array_keys(DpressServices::WIDGETS) as $type) {
             $this->assertTrue($widgets->has($type), "'$type' is not registered");
             $template = str_replace(Dpress::VIEW_NAMESPACE.':', '', $widgets->view($type));
             $this->assertFileExists(Dpress::viewsPath().'/'.$template.'.phtml');
+        }
+        foreach (['markdown', 'media', 'asset', 'checkboxes', 'permissions'] as $type) {
+            $this->assertArrayHasKey($type, DpressServices::WIDGETS, "the CMS stopped offering '$type'");
         }
         // the framework's own seven are still there, so `text` did not stop working
         $this->assertTrue($widgets->has('select'));
