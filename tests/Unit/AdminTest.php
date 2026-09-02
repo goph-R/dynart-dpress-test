@@ -412,19 +412,40 @@ class AdminTest extends TestCase {
     }
 
     /**
-     * The logo and the icon are pickable, and still a path
+     * The logo and the icon are chosen from the library
      *
-     * `asset` rather than `media`, and that is not a detail: a media field stores an **id**, and
-     * `Setting::SITE_LOGO` is deliberately not one. Chrome renders on pages with no content on
-     * them, before anything has been uploaded, and deleting a library item must not be able to
-     * take the header down. So the picker fills a text field with a path, and typing one by hand
-     * still works.
+     * What used to argue against it - a logo is chrome, it renders on pages with no content on
+     * them, and deleting a library item must not take the header down - is answered by the
+     * fallback in `AbstractController::brandingAsset()` rather than by refusing to use the
+     * picker. See `Setting::CONFIG_DEFAULT_LOGO`.
      */
-    public function testTheBrandingFieldsAreAssetsRatherThanMedia(): void {
+    public function testTheBrandingFieldsUseTheMediaChooser(): void {
         $fields = $this->factory()->create(AdminForms::SETTINGS, ['themes' => []])->fields();
         foreach ([Setting::SITE_LOGO, Setting::SITE_ICON] as $name) {
-            $this->assertSame('asset', $fields[$name]['type'] ?? '', "'$name' should be a path, not a media id");
+            $this->assertSame('media', $fields[$name]['type'] ?? '', "'$name' should be chosen from the library");
         }
+    }
+
+    /**
+     * Nothing chosen is stored as nothing, not as `0`
+     *
+     * The field shows its Remove button whenever the value is not `''`, so a `0` read back from
+     * an unset setting would offer to remove a file nobody had chosen.
+     */
+    public function testAnUnchosenBrandingSettingIsEmptyRatherThanZero(): void {
+        $this->assertSame('', $this->coerce('media', 0));
+        $this->assertSame('', $this->coerce('media', ''));
+        $this->assertSame('7', $this->coerce('media', 7));
+    }
+
+    private function coerce(string $type, mixed $value): string {
+        // the same `match` the controller saves through, exercised without a database behind it
+        return match ($type) {
+            'bool' => $value ? '1' : '0',
+            'int'  => (string)(int)$value,
+            'media' => (int)$value > 0 ? (string)(int)$value : '',
+            default => trim((string)$value),
+        };
     }
 
     public function testTheSettingsScreenOnlyWritesEditableSettings(): void {
@@ -458,7 +479,7 @@ class AdminTest extends TestCase {
             $template = str_replace(Dpress::VIEW_NAMESPACE.':', '', $widgets->view($type));
             $this->assertFileExists(Dpress::viewsPath().'/'.$template.'.phtml');
         }
-        foreach (['markdown', 'media', 'asset', 'checkboxes', 'permissions'] as $type) {
+        foreach (['markdown', 'media', 'checkboxes', 'permissions'] as $type) {
             $this->assertArrayHasKey($type, DpressServices::WIDGETS, "the CMS stopped offering '$type'");
         }
         // the framework's own seven are still there, so `text` did not stop working
