@@ -25,6 +25,9 @@ class StubDatabase extends Database {
     /** What every `fetchColumn()` returns */
     public array $column = [];
 
+    /** What every `fetchAll()` returns */
+    public array $rows = [];
+
     public function __construct(?ConfigInterface $config = null) {
         parent::__construct($config ?? new StubConfig(), new StubLogger(), new PdoBuilder());
     }
@@ -52,6 +55,11 @@ class StubDatabase extends Database {
     public function fetchColumn(string $query, array $params = []): array {
         $this->queries[] = ['sql' => $query, 'params' => $params];
         return $this->column;
+    }
+
+    public function fetchAll(string $query, array $params = [], string $className = ''): array {
+        $this->queries[] = ['sql' => $query, 'params' => $params];
+        return $this->rows;
     }
 
     public function lastInsertId(?string $name = null): string|false {
