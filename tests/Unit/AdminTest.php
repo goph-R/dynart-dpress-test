@@ -201,12 +201,16 @@ class AdminTest extends TestCase {
      *
      * Row deletes used to carry this: `/delete/?` existed for every list because every row had a
      * button. The buttons are gone, so this is the list that has to be kept.
+     *
+     * **Categories are not on it.** That screen stopped being a dynamic list in 0.29.0 and became
+     * a tree table you drag rows around, which offers nothing to select - so a `delete-selected`
+     * there would be an endpoint with no way to reach it. Its rows have their own delete button,
+     * the way the menu items screen has always had.
      */
     public function testEveryListCanDeleteASelection(): void {
         $expected = [
             '/admin/content/?/delete-selected',
             '/admin/media/delete-selected',
-            '/admin/categories/delete-selected',
             '/admin/tags/delete-selected',
             '/admin/menus/delete-selected',
             '/admin/users/delete-selected',
@@ -499,11 +503,14 @@ class AdminTest extends TestCase {
 
     // --- the sortable whitelists ---
 
+    /**
+     * Categories have no list to sort: that screen is a tree table now, and a tree in name order
+     * is not a tree
+     */
     public function testTheSortableColumnsAreRealColumnsOfTheEntity(): void {
         $this->assertSortableAgainst(ContentAdminController::SORTABLE, Content::class);
         $this->assertSortableAgainst(MediaAdminController::SORTABLE, \Dynart\Dpress\Entity\Media::class);
         $this->assertSortableAgainst(UserAdminController::SORTABLE, \Dynart\Dpress\Entity\User::class);
-        $this->assertSortableAgainst(TaxonomyAdminController::CATEGORY_SORTABLE, \Dynart\Dpress\Entity\Category::class);
         $this->assertSortableAgainst(TaxonomyAdminController::TAG_SORTABLE, \Dynart\Dpress\Entity\Tag::class);
     }
 
