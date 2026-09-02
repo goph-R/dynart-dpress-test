@@ -149,9 +149,31 @@ class CodeHighlightingTest extends TestCase {
         $this->assertFileExists(dirname(Dpress::viewsPath()).'/assets/enlighter/enlighterjs.min.js');
     }
 
+    /**
+     * Every theme paints the block's background on `.enlighter-default` and sets `padding: 0`, so
+     * the code sits against the top and bottom edges of the colour. The correction is one class
+     * against the theme's one class, which means **source order decides it** - and the theme's
+     * stylesheet is added to the page after the layout's own `<style>`. So it has to come from
+     * here, after the link, rather than from a layout that happens to be earlier.
+     */
+    public function testThePaddingCorrectionComesAfterTheThemeItCorrects(): void {
+        $tags = $this->assets('dracula')->tags();
+        $link = strpos($tags, 'dracula.min.css');
+        $style = strpos($tags, CodeAssets::PADDING);
+        $this->assertNotFalse($link);
+        $this->assertNotFalse($style);
+        $this->assertGreaterThan($link, $style, 'the correction is before the stylesheet, so it loses');
+    }
+
+    public function testNothingIsEmittedWhenHighlightingIsOff(): void {
+        $this->assertSame('', $this->assets(CodeAssets::NONE)->tags());
+    }
+
     private function assets(string $theme): CodeAssets {
         $settings = new PlacesSettings();   // the stub from ThemePlacesTest: answers from an array
         $settings->values[\Dynart\Dpress\Entity\Setting::CODE_THEME] = $theme;
-        return new CodeAssets($this->createMock(\Dynart\Micro\RouterInterface::class), $settings);
+        $router = $this->createMock(\Dynart\Micro\RouterInterface::class);
+        $router->method('url')->willReturnCallback(fn(string $path, array $q = []) => '/base'.$path);
+        return new CodeAssets($router, $settings);
     }
 }
