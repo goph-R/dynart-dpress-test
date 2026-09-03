@@ -475,6 +475,7 @@ class AdminTest extends TestCase {
             Setting::SITE_ICON,
             Setting::REGISTRATION_OPEN,
             Setting::POSTS_PER_PAGE,
+            Setting::FEATURED_TAG,
             Setting::CODE_THEME,
         ], array_keys(SettingsAdminController::FIELDS));
     }
