@@ -97,4 +97,29 @@ class PostPathTest extends TestCase {
             Setting::POST_PATHS
         );
     }
+
+    // --- and a post reached from the root is still a post ---
+
+    /**
+     * The catch-all serves everything living at the root, which is posts as well as pages now.
+     * Both routes go through one method, because the moment the catch-all started answering for a
+     * post it rendered it with the **page** template: no byline, no categories, no tags, and a
+     * featured image the post template had deliberately left out. The kind of the content decides
+     * the template, never the route that reached it.
+     */
+    public function testTheTemplateFollowsTheContentAndNotTheRoute(): void {
+        $source = file_get_contents((new ReflectionClass(
+            \Dynart\Dpress\Controller\AbstractController::class))->getFileName());
+        $this->assertStringContainsString('renderContent', $source);
+
+        // neither route may render a template of its own any more
+        foreach ([\Dynart\Dpress\Controller\ContentController::class,
+                  \Dynart\Dpress\Controller\PageController::class] as $className) {
+            $body = file_get_contents((new ReflectionClass($className))->getFileName());
+            $this->assertStringNotContainsString("render('dpress:content/page'", $body, $className);
+            $this->assertStringNotContainsString("render('dpress:content/single'", $body, $className);
+            $this->assertStringContainsString('renderContent($content)', $body, $className);
+        }
+    }
+
 }
