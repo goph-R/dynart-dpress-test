@@ -162,4 +162,86 @@ class ContentPagesTest extends TestCase {
         $this->assertNull(ContentPages::page($html, 0));
         $this->assertNotNull(ContentPages::page($html, 2));
     }
+    // --- and which page a line of the document is on ---
+
+    /**
+     * What Preview asks so the tab opens on the part somebody was writing rather than at the
+     * top of a seven page article. The answer has to come from the same two rules the pages
+     * themselves come from, or it opens confidently on the wrong one.
+     */
+    private function document(): string {
+        // lines:  0 lead   1        2 ---   3        4 one   5        6 ---   7        8 two
+        return "The lead.\n\n---\n\nPart one.\n\n---\n\nPart two.";
+    }
+
+    public function testTheLeadIsPageOne(): void {
+        foreach ([0, 1, 2] as $line) {
+            $this->assertSame(1, $this->renderer->pageOfLine($this->document(), $line), (string)$line);
+        }
+    }
+
+    /**
+     * The separator that ends the lead is *not* a page break - the body starts after it, and
+     * its first part is still page one
+     */
+    public function testTheFirstPartOfTheBodyIsAlsoPageOne(): void {
+        $this->assertSame(1, $this->renderer->pageOfLine($this->document(), 4));
+    }
+
+    public function testALineAfterAPageBreakIsTheNextPage(): void {
+        $this->assertSame(2, $this->renderer->pageOfLine($this->document(), 8));
+    }
+
+    /**
+     * A separator line belongs to the page it ends, which is where the cursor reads as being
+     * when somebody has just typed one
+     */
+    public function testAPageBreakBelongsToThePageAbove(): void {
+        $this->assertSame(1, $this->renderer->pageOfLine($this->document(), 6));
+    }
+
+    /**
+     * The answer can never be a page the pager does not offer, so it is worth checking against
+     * the count rather than only against itself
+     */
+    public function testItNeverAnswersPastTheLastPage(): void {
+        $markdown = $this->document();
+        $pages = ContentPages::count($this->renderer->renderSplit($markdown)['body']);
+        $this->assertSame(2, $pages);
+        foreach (range(0, 40) as $line) {
+            $page = $this->renderer->pageOfLine($markdown, $line);
+            $this->assertGreaterThanOrEqual(1, $page, (string)$line);
+            $this->assertLessThanOrEqual($pages, $page, (string)$line);
+        }
+    }
+
+    /**
+     * A document with no separator at all is one page whatever line the cursor is on - and so is
+     * one whose only separator ends the lead
+     */
+    public function testADocumentThatWasNeverBrokenUpIsAlwaysPageOne(): void {
+        $this->assertSame(1, $this->renderer->pageOfLine("Just a note.\n\nAnd more.", 2));
+        $this->assertSame(1, $this->renderer->pageOfLine("Lead.\n\n---\n\nBody.", 4));
+    }
+
+    /**
+     * The rule that carries the whole feature applies here too: a `---` inside fenced code is
+     * not a page break, so a cursor below it must not be told it is on a page that does not exist
+     */
+    public function testASeparatorInsideCodeIsNotAPageBreakHereEither(): void {
+        $markdown = "Lead.\n\n---\n\nOne.\n\n```\n---\n```\n\nStill one.";
+        $this->assertSame(1, ContentPages::count($this->renderer->renderSplit($markdown)['body']));
+        $this->assertSame(1, $this->renderer->pageOfLine($markdown, 10));
+    }
+
+    /**
+     * `---` right after `---` is a typo rather than an empty page, and `pages()` drops it - so
+     * the numbering here has to drop it too or every page after the typo is out by one
+     */
+    public function testAnEmptyPageIsSkippedTheWayItIsWhenRendering(): void {
+        $markdown = "Lead.\n\n---\n\nOne.\n\n---\n---\n\nTwo.";
+        $this->assertSame(2, ContentPages::count($this->renderer->renderSplit($markdown)['body']));
+        $this->assertSame(2, $this->renderer->pageOfLine($markdown, 9));
+    }
+
 }
