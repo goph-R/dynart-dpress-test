@@ -21,6 +21,7 @@ use ReflectionMethod;
  * quieter one: a tag chosen under the category kind had its `t` stripped by `ltrim($v, 'ct')` and
  * the item pointed at the category with that id, at a URL nobody had chosen.
  *
+ * @covers \Dynart\Dpress\Entity\MenuItem
  * @covers \Dynart\Dpress\Controller\Admin\MenuAdminController
  */
 class MenuItemTargetTest extends TestCase {
@@ -33,7 +34,7 @@ class MenuItemTargetTest extends TestCase {
     }
 
     private function targetId(string $type, string $value): ?int {
-        return $this->call('targetId', [$type, $value]);
+        return MenuItem::targetIdIn($type, $value);
     }
 
     private function problem(string $type, ?int $targetId, string $url): ?string {
@@ -45,34 +46,69 @@ class MenuItemTargetTest extends TestCase {
     // --- the value has to be of the kind that was chosen ---
 
     public function testEachKindReadsItsOwnValue(): void {
-        $this->assertSame(12, $this->targetId(MenuItem::TARGET_CONTENT, '12'));
-        $this->assertSame(12, $this->targetId(MenuItem::TARGET_CATEGORY, 'c12'));
-        $this->assertSame(12, $this->targetId(MenuItem::TARGET_TAG, 't12'));
+        $this->assertSame(12, $this->targetId(MenuItem::TARGET_CONTENT, 'content:12'));
+        $this->assertSame(12, $this->targetId(MenuItem::TARGET_CATEGORY, 'category:12'));
+        $this->assertSame(12, $this->targetId(MenuItem::TARGET_TAG, 'tag:12'));
     }
 
     /**
-     * The quiet one: `ltrim('t12', 'ct')` is `12`, so a tag chosen under the category kind used to
-     * become category 12 - an item pointing somewhere nobody picked, with nothing said
+     * And a value is written by the same rule it is read by, so an item being edited comes back
+     * with its own target selected rather than with `(none)`
+     */
+    public function testAValueIsWrittenTheWayItIsRead(): void {
+        foreach (MenuItem::TARGETS_WITH_ID as $type) {
+            $value = MenuItem::targetValue($type, 12);
+            $this->assertSame($type.':12', $value);
+            $this->assertSame(12, $this->targetId($type, $value));
+        }
+    }
+
+    /**
+     * The kinds that point at nothing in the library have no value to write, whatever is left in
+     * the column - so the select comes back on `(none)` rather than on a stale row
+     */
+    public function testTheKindsThatPointAtNothingWriteNoValue(): void {
+        $this->assertSame('', MenuItem::targetValue(MenuItem::TARGET_HOME, 12));
+        $this->assertSame('', MenuItem::targetValue(MenuItem::TARGET_URL, 12));
+        $this->assertSame('', MenuItem::targetValue(MenuItem::TARGET_CONTENT, null));
+    }
+
+    /**
+     * The quiet one: `ltrim('t12', 'ct')` was `12`, so a tag chosen under the category kind used
+     * to become category 12 - an item pointing somewhere nobody picked, with nothing said. The
+     * browser narrows the select to one kind now, so this is what is left when it cannot: the
+     * script off, or a form posted by hand.
      */
     public function testAValueOfTheWrongKindIsNoTargetAtAll(): void {
-        $this->assertNull($this->targetId(MenuItem::TARGET_CATEGORY, 't12'));
-        $this->assertNull($this->targetId(MenuItem::TARGET_TAG, 'c12'));
-        $this->assertNull($this->targetId(MenuItem::TARGET_CONTENT, 'c12'));
-        $this->assertNull($this->targetId(MenuItem::TARGET_CONTENT, 't12'));
+        $this->assertNull($this->targetId(MenuItem::TARGET_CATEGORY, 'tag:12'));
+        $this->assertNull($this->targetId(MenuItem::TARGET_TAG, 'category:12'));
+        $this->assertNull($this->targetId(MenuItem::TARGET_CONTENT, 'category:12'));
+        $this->assertNull($this->targetId(MenuItem::TARGET_CONTENT, 'tag:12'));
     }
 
     /**
-     * `ltrim` also ate a leading `c` or `t` from anything - these are the kinds that point at
-     * nothing in the library, and a stale value left in the select must not become an id
+     * A kind's name may not be read as a prefix of a longer one, nor an id as a prefix of a
+     * longer id - the colon is what makes both true, and it is why the value is not just glued
+     */
+    public function testNeitherHalfIsReadAsAPrefixOfALongerOne(): void {
+        $this->assertSame(120, $this->targetId(MenuItem::TARGET_CONTENT, 'content:120'));
+        $this->assertNull($this->targetId(MenuItem::TARGET_TAG, 'tagged:12'));
+        $this->assertNull($this->targetId(MenuItem::TARGET_CONTENT, 'content12'));
+    }
+
+    /**
+     * The front page and an external address point at nothing in the library, so a stale value
+     * left in the select must not become an id
      */
     public function testTheKindsThatPointAtNothingKeepNoTarget(): void {
-        $this->assertNull($this->targetId(MenuItem::TARGET_HOME, '12'));
-        $this->assertNull($this->targetId(MenuItem::TARGET_URL, 'c12'));
+        $this->assertNull($this->targetId(MenuItem::TARGET_HOME, 'content:12'));
+        $this->assertNull($this->targetId(MenuItem::TARGET_URL, 'category:12'));
     }
 
     public function testNothingChosenIsNoTarget(): void {
         $this->assertNull($this->targetId(MenuItem::TARGET_CONTENT, ''));
-        $this->assertNull($this->targetId(MenuItem::TARGET_CATEGORY, 'c'));
+        $this->assertNull($this->targetId(MenuItem::TARGET_CATEGORY, 'category:'));
+        $this->assertNull($this->targetId(MenuItem::TARGET_CONTENT, 'content:0'));
         $this->assertNull($this->targetId(MenuItem::TARGET_CONTENT, 'nonsense'));
     }
 
