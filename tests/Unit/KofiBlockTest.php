@@ -77,7 +77,39 @@ class KofiBlockTest extends TestCase {
         }
     }
 
+    // --- the text colour ---
+
+    /**
+     * An empty box means "decide for me", which is why the text colour cannot simply go
+     * through `color()`: that falls back to a colour, and what is wanted here is falling back
+     * to a *decision*
+     */
+    public function testAnEmptyTextColourIsTheAutomaticOne(): void {
+        $this->assertSame('#ffffff', $this->block->ink('#29abe0', ''));
+        $this->assertSame('#1b1b1b', $this->block->ink('#f1fa8c', '   '));
+    }
+
+    /**
+     * Automatic is not always right - a brand has two colours, not one - so a value wins
+     */
+    public function testAChosenTextColourWins(): void {
+        $this->assertSame('#f1fa8c', $this->block->ink('#29abe0', '#F1FA8C'));
+        $this->assertSame('#ffffff', $this->block->ink('#f1fa8c', 'fff'));
+    }
+
+    /**
+     * It goes into the same `style` attribute the background does, so it is refused the same
+     * way - and a refused one is the automatic colour rather than nothing, because a button
+     * with no text colour at all is a button nobody can read
+     */
+    public function testATextColourThatIsNotOneFallsBackToAutomatic(): void {
+        foreach (['blue', '#GG0000', 'red; background: url(x)'] as $typed) {
+            $this->assertSame('#ffffff', $this->block->ink('#29abe0', $typed), $typed);
+        }
+    }
+
     // --- and what can be read on it ---
+
 
     /**
      * A pale brand colour would otherwise get white text on it, which is a button nobody can read
