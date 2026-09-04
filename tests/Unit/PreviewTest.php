@@ -26,11 +26,18 @@ use ReflectionMethod;
  */
 class PreviewTest extends TestCase {
 
+    private PreviewSession $session;
+
+    protected function setUp(): void {
+        $this->session = new PreviewSession();
+    }
+
     private function controller(): ContentAdminController {
         $reflection = new ReflectionClass(ContentAdminController::class);
         $controller = $reflection->newInstanceWithoutConstructor();
         foreach (['slugger' => new Slugger(), 'content' => new PreviewRenderer(),
-                  'taxonomy' => new PreviewTaxonomy()] as $name => $value) {
+                  'taxonomy' => new PreviewTaxonomy(),
+                  'session' => $this->session] as $name => $value) {
             $property = $reflection->getProperty($name);
             $property->setAccessible(true);
             $property->setValue($controller, $value);
@@ -142,23 +149,108 @@ class PreviewTest extends TestCase {
     // --- and how it is reached ---
 
     /**
-     * POST only, like every other action posted from a form: the boxes are the request body, and
-     * there is nothing to see at this address without them
+     * Post, redirect, get - and it is the paging that made it worth doing
+     *
+     * The boxes can only arrive by POST. Everything after that is a GET of a real address,
+     * which is what lets a body written in `---` parts page through on **links** the way it
+     * will once it is saved: a theme renders the pager it always renders and knows nothing
+     * about previews. Refreshing the tab stops re-posting into the bargain.
      */
-    public function testThePreviewIsPostOnly(): void {
+    public function testTheBoxesArriveByPostAndEveryPageAfterThatIsAGet(): void {
+        $this->assertSame(['POST'], $this->routeMethods('preview'));
+        $this->assertSame(['GET'], $this->routeMethods('previewPage'));
+    }
+
+    private function routeMethods(string $method): array {
         $methods = [];
-        foreach ((new ReflectionMethod(ContentAdminController::class, 'preview'))
+        foreach ((new ReflectionMethod(ContentAdminController::class, $method))
                      ->getAttributes(Route::class) as $attribute) {
             $route = $attribute->newInstance();
             $this->assertStringContainsString('/preview/', $route->path);
             $methods[] = $route->method;
         }
-        $this->assertSame(['POST'], $methods);
+        return $methods;
+    }
+
+    // --- the boxes, kept where the next few GETs can read them ---
+
+    /**
+     * The session and **not the database**: the post itself is still never written, which is
+     * the whole point. This is one tab's copy of what somebody typed.
+     */
+    public function testWhatWasHandedOverComesBack(): void {
+        $controller = $this->controller();
+        $token = $this->keep($controller, 12, ['title' => 'Typed']);
+        $this->assertNotSame('', $token);
+        $this->assertSame(['title' => 'Typed'], $this->keptPreview($controller, 12, $token));
+    }
+
+    /**
+     * A token is of one post. One that has fallen off the end must not quietly render whatever
+     * else the address happens to name.
+     */
+    public function testATokenIsNoGoodForAnotherPost(): void {
+        $controller = $this->controller();
+        $token = $this->keep($controller, 12, ['title' => 'Typed']);
+        $this->assertNull($this->keptPreview($controller, 13, $token));
+        $this->assertNull($this->keptPreview($controller, 12, 'not a token'));
+        $this->assertNull($this->keptPreview($controller, 12, ''));
+    }
+
+    /**
+     * Two tabs have to work, and a long session must not become the place a hundred drafts
+     * pile up - so a few are kept and the oldest goes
+     */
+    public function testAFewArePreviewedAtOnceAndTheOldestFallsOff(): void {
+        $controller = $this->controller();
+        $tokens = [];
+        foreach (range(1, ContentAdminController::PREVIEW_KEEP + 1) as $n) {
+            $tokens[$n] = $this->keep($controller, $n, ['title' => 'Post '.$n]);
+        }
+        $this->assertNull($this->keptPreview($controller, 1, $tokens[1]), 'the oldest should be gone');
+        foreach (range(2, ContentAdminController::PREVIEW_KEEP + 1) as $n) {
+            $this->assertSame(['title' => 'Post '.$n], $this->keptPreview($controller, $n, $tokens[$n]), (string)$n);
+        }
+    }
+
+    /**
+     * Two previews are never the same address, so one tab cannot show what another one typed
+     */
+    public function testEveryPreviewGetsATokenOfItsOwn(): void {
+        $controller = $this->controller();
+        $this->assertNotSame($this->keep($controller, 12, []), $this->keep($controller, 12, []));
+    }
+
+    private function keep(ContentAdminController $controller, int $id, array $values): string {
+        $method = new ReflectionMethod(ContentAdminController::class, 'keepPreview');
+        $method->setAccessible(true);
+        return $method->invokeArgs($controller, [$id, $values]);
+    }
+
+    private function keptPreview(ContentAdminController $controller, int $id, string $token): ?array {
+        $method = new ReflectionMethod(ContentAdminController::class, 'storedPreview');
+        $method->setAccessible(true);
+        return $method->invokeArgs($controller, [$id, $token]);
     }
 
     private function previewOf(array $values): Content {
         return $this->call('previewOf', [$this->stored(), $values]);
     }
+}
+
+/**
+ * A session that is a box, which is all the preview asks of one
+ */
+class PreviewSession implements \Dynart\Micro\SessionInterface {
+
+    public array $values = [];
+
+    public function destroy(): void { $this->values = []; }
+    public function id(): string { return 'test'; }
+    public function get(string $name, mixed $default = null): mixed {
+        return $this->values[$name] ?? $default;
+    }
+    public function set(string $name, mixed $value): void { $this->values[$name] = $value; }
 }
 
 /**
