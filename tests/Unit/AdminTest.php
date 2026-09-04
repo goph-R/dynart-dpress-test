@@ -588,6 +588,7 @@ class AdminTest extends TestCase {
             Setting::SITE_ICON,
             Setting::REGISTRATION_OPEN,
             Setting::POSTS_PER_PAGE,
+            Setting::POST_PATH,
             Setting::FEATURED_TAG,
             Setting::DATE_FORMAT,
             Setting::TIMEZONE,
