@@ -587,6 +587,7 @@ class AdminTest extends TestCase {
             Setting::SITE_LOGO,
             Setting::SITE_ICON,
             Setting::REGISTRATION_OPEN,
+            Setting::AUTOLINK,
             Setting::POSTS_PER_PAGE,
             Setting::POST_PATH,
             Setting::FEATURED_TAG,
