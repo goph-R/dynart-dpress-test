@@ -237,6 +237,65 @@ class AdminTest extends TestCase {
     }
 
     /**
+     * ...and each of those routes is on the method that does the deleting
+     *
+     * The other half of the test above, and the half that was missing. An attribute binds to the
+     * declaration that *follows* it, so one written above the next method's docblock belongs to
+     * that method - which is how `/admin/menus/items/delete/?` came to sit on `moveItem()`.
+     * Deleting a menu item moved it to the top of the menu instead and answered with the move
+     * endpoint's JSON, `{"csrf": "..."}`, printed into the browser as the whole page. Every test
+     * there was passed: the route existed, it was a POST, it was not a bulk delete. Nothing asked
+     * where it went.
+     */
+    public function testEveryDeleteRouteIsOnADeletingMethod(): void {
+        foreach (self::ADMIN_CONTROLLERS as $className) {
+            foreach ((new ReflectionClass($className))->getMethods(ReflectionMethod::IS_PUBLIC) as $method) {
+                foreach ($method->getAttributes(Route::class) as $attribute) {
+                    $path = $attribute->newInstance()->path;
+                    if (!str_contains($path, '/delete/')) {
+                        continue;
+                    }
+                    $this->assertStringStartsWith(
+                        'delete', $method->getName(),
+                        "$path is served by {$className}::{$method->getName()}(), which is not a delete"
+                    );
+                }
+            }
+        }
+    }
+
+    /**
+     * A `#[Route]` may not be separated from its method by a docblock
+     *
+     * The shape that produced the bug above, caught where it happens rather than one route at a
+     * time. Attributes and docblocks may legally be written in either order, but a docblock
+     * describes the declaration under it - so an attribute written *above* one reads as belonging
+     * to whatever came before, while PHP binds it to whatever comes after. The two readings
+     * disagree silently, and the file looks right.
+     */
+    public function testNoRouteAttributeIsSeparatedFromItsMethodByADocblock(): void {
+        foreach (array_merge(self::ADMIN_CONTROLLERS, [AssetController::class]) as $className) {
+            $lines = file((new ReflectionClass($className))->getFileName());
+            foreach ($lines as $number => $line) {
+                if (!str_starts_with(trim($line), '#[Route(')) {
+                    continue;
+                }
+                for ($i = $number + 1; $i < count($lines); $i++) {
+                    $next = trim($lines[$i]);
+                    if (str_contains($next, 'function ')) {
+                        break;
+                    }
+                    $this->assertStringStartsNotWith(
+                        '/**', $next,
+                        $className.' line '.($number + 1).': this route binds to the method after'
+                            .' the docblock below it, not to the one it is written under'
+                    );
+                }
+            }
+        }
+    }
+
+    /**
      * Selecting rows is still there, for the one thing it is good at
      *
      * Enabling six plugins at once is a real act; deleting six things at once is a mistake
