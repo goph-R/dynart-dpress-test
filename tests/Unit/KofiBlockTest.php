@@ -123,4 +123,39 @@ class KofiBlockTest extends TestCase {
             $this->assertFalse($this->block->isLight($dark), $dark);
         }
     }
+    // --- the description, which is markdown ---
+
+    /**
+     * Rendered when the block is saved and printed on the page, the same bargain a post makes:
+     * the text is the truth and the HTML beside it is a cache of it
+     */
+    public function testTheDescriptionIsRenderedAtSaveTime(): void {
+        $rendered = $this->description(['description_html' => '<p>Say <em>hello</em></p>']);
+        $this->assertSame('<p>Say <em>hello</em></p>', $rendered);
+    }
+
+    /**
+     * A block saved before the description was markdown has no cache to print, and the honest
+     * thing then is the words themselves rather than nothing - escaped, because they were typed
+     * as text and never went through a renderer
+     */
+    public function testABlockSavedBeforeThisStillShowsItsWords(): void {
+        $rendered = $this->description(['description' => 'Buy me a <coffee> & a cake']);
+        $this->assertStringContainsString('&lt;coffee&gt;', $rendered);
+        $this->assertStringContainsString('&amp;', $rendered);
+        $this->assertStringStartsWith('<p>', $rendered);
+    }
+
+    public function testNoDescriptionIsNothingAtAll(): void {
+        $this->assertSame('', $this->description([]));
+        $this->assertSame('', $this->description(['description' => '   ']));
+        $this->assertSame('', $this->description(['description_html' => '  ', 'description' => '']));
+    }
+
+    private function description(array $settings): string {
+        $method = new \ReflectionMethod(KofiBlock::class, 'description');
+        $method->setAccessible(true);
+        return $method->invoke($this->block, $settings);
+    }
+
 }
