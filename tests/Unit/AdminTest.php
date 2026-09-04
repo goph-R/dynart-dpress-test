@@ -484,11 +484,18 @@ class AdminTest extends TestCase {
      * has a default, so demanding them would be asking for what the CMS already knows
      */
     public function testOnlyTheTitleAndTheTextAreRequired(): void {
-        $form = $this->factory()->create(AdminForms::CONTENT, ['is_page' => false]);
-        $this->assertTrue($form->required('title'));
-        $this->assertTrue($form->required('markdown'));
-        $this->assertFalse($form->required('slug'));
-        $this->assertFalse($form->required('status'));
+        foreach ([true, false] as $isPage) {
+            $form = $this->factory()->create(AdminForms::CONTENT, ['is_page' => $isPage]);
+            // the whole set, not a sample. `addFields()` makes a field required unless it is
+            // told otherwise, so a new one put in the wrong group is required by accident -
+            // and a *hidden* one then fails every save with nowhere to say why, which is
+            // exactly what `cursor_line` did for one release.
+            $required = array_keys(array_filter(
+                $form->fields(), fn($name) => $form->required($name), ARRAY_FILTER_USE_KEY
+            ));
+            sort($required);
+            $this->assertSame(['markdown', 'title'], $required, $isPage ? 'page' : 'post');
+        }
     }
 
     /**
