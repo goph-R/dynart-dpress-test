@@ -12,6 +12,7 @@ use Dynart\Dpress\Controller\Admin\RoleAdminController;
 use Dynart\Dpress\Controller\Admin\SettingsAdminController;
 use Dynart\Dpress\Controller\Admin\TaxonomyAdminController;
 use Dynart\Dpress\Controller\Admin\UserAdminController;
+use Dynart\Dpress\Content\Dates;
 use Dynart\Dpress\Dpress;
 use Dynart\Dpress\DpressServices;
 use Dynart\Dpress\DpressWebApp;
@@ -385,6 +386,52 @@ class AdminTest extends TestCase {
         $this->assertArrayHasKey('title', $refused->fields());
         $this->assertArrayHasKey('markdown', $refused->fields());
         $this->assertArrayHasKey('featured_media_id', $refused->fields());
+    }
+
+    /**
+     * And the published date goes with it, because it is the same decision
+     *
+     * The public queries ask for `published_at <= now`, so a date is as much a say in whether
+     * something is visible as the select beside it - dating a post forward hides it. Offering it
+     * to somebody who cannot publish would be the same silent no-op the status select was.
+     */
+    public function testThePublishedDateIsOfferedOnTheSameTermsAsTheStatus(): void {
+        $factory = $this->factory();
+        $allowed = $factory->create(AdminForms::CONTENT, ['is_page' => false, 'can_publish' => true]);
+        $this->assertArrayHasKey('published_at', $allowed->fields());
+        // empty means "the moment it is published", so it cannot be required
+        $this->assertFalse($allowed->required('published_at'));
+
+        $refused = $factory->create(AdminForms::CONTENT, ['is_page' => false, 'can_publish' => false]);
+        $this->assertArrayNotHasKey('published_at', $refused->fields());
+    }
+
+    /**
+     * A date that cannot be read stops the save rather than being dropped
+     *
+     * `done()` redirects, so a message put on the form after the save is a message nobody sees -
+     * and half a save, the text stored and the date silently refused, is worse than none.
+     */
+    public function testADateThatCannotBeReadIsRefusedOnItsOwnField(): void {
+        $readable = new ReflectionMethod(ContentAdminController::class, 'publishedAtIsReadable');
+        $readable->setAccessible(true);
+        $controller = (new ReflectionClass(ContentAdminController::class))->newInstanceWithoutConstructor();
+        $dates = (new ReflectionClass(ContentAdminController::class))->getProperty('dates');
+        $dates->setAccessible(true);
+        $dates->setValue($controller, new Dates(new PlacesSettings()));
+
+        $form = $this->factory()->create(AdminForms::CONTENT, ['is_page' => false]);
+        $form->addValues(['published_at' => '2014-03-09']);
+        $this->assertTrue($readable->invoke($controller, $form));
+        $this->assertNull($form->error('published_at'));
+
+        // the field left alone is not a failure to read - it means "the moment it is published"
+        $form->addValues(['published_at' => '']);
+        $this->assertTrue($readable->invoke($controller, $form));
+
+        $form->addValues(['published_at' => 'last tuesday']);
+        $this->assertFalse($readable->invoke($controller, $form));
+        $this->assertStringContainsString('1999-01-02', (string)$form->error('published_at'));
     }
 
     /**
