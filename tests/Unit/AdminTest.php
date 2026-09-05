@@ -10,6 +10,7 @@ use Dynart\Dpress\Controller\Admin\MediaAdminController;
 use Dynart\Dpress\Controller\Admin\MenuAdminController;
 use Dynart\Dpress\Controller\Admin\RoleAdminController;
 use Dynart\Dpress\Controller\Admin\SettingsAdminController;
+use Dynart\Dpress\Service\SettingFields;
 use Dynart\Dpress\Controller\Admin\TaxonomyAdminController;
 use Dynart\Dpress\Controller\Admin\UserAdminController;
 use Dynart\Dpress\Content\Dates;
@@ -23,6 +24,7 @@ use Dynart\Dpress\Form\DpressForm;
 use Dynart\Dpress\Form\FormFactory;
 use Dynart\Dpress\Query\ListRequest;
 use Dynart\Dpress\Test\RecordingEvents;
+use Dynart\Dpress\Test\StubLogger;
 use Dynart\Dpress\Test\StubTranslation;
 use Dynart\Micro\Attribute\Authorize;
 use Dynart\Micro\FormWidgets;
@@ -535,9 +537,22 @@ class AdminTest extends TestCase {
         $this->assertSame([$form->csrfName()], array_keys($form->fields()));
     }
 
+    /**
+     * The registry as the apps seed it
+     *
+     * A registry rather than the `const` it was: a plugin adding a settings field used to see
+     * it render and then not be saved, because the loop that writes them iterated a constant it
+     * had no way into.
+     */
+    private function settingFields(): SettingFields {
+        $fields = new SettingFields(new StubLogger());
+        DpressServices::registerSettingFields($fields);
+        return $fields;
+    }
+
     public function testTheSettingsFormCoversTheSettingsTheScreenWrites(): void {
         $form = $this->factory()->create(AdminForms::SETTINGS, ['themes' => ['' => 'Built in']]);
-        foreach (array_keys(SettingsAdminController::FIELDS) as $name) {
+        foreach (array_keys($this->settingFields()->types()) as $name) {
             $this->assertArrayHasKey($name, $form->fields(), "the settings form has no '$name' field");
         }
         $this->assertArrayHasKey('theme', $form->fields());
@@ -624,7 +639,7 @@ class AdminTest extends TestCase {
             Setting::DATE_FORMAT,
             Setting::TIMEZONE,
             Setting::CODE_THEME,
-        ], array_keys(SettingsAdminController::FIELDS));
+        ], array_keys($this->settingFields()->types()));
     }
 
     /**
