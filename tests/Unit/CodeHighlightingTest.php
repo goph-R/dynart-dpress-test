@@ -181,10 +181,32 @@ class CodeHighlightingTest extends TestCase {
     public function testThePaddingCorrectionComesAfterTheThemeItCorrects(): void {
         $tags = $this->assets('dracula')->tags();
         $link = strpos($tags, 'dracula.min.css');
-        $style = strpos($tags, CodeAssets::PADDING);
+        $style = strpos($tags, CodeAssets::STYLE);
         $this->assertNotFalse($link);
         $this->assertNotFalse($style);
         $this->assertGreaterThan($link, $style, 'the correction is before the stylesheet, so it loses');
+    }
+
+    /**
+     * A wrapped line of code says something different from the line that was written
+     *
+     * EnlighterJS defaults `textOverflow` to `break`, so a long line wraps - and code is the one
+     * kind of text where that changes the meaning: the indent stops marking a nesting level and
+     * a shell command comes apart mid-flag. `scroll` is the library's own supported mode; it adds
+     * `enlighter-overflow-scroll`, which its stylesheets already answer with `overflow-x: auto`
+     * and `white-space: pre`. Worth a test because it is one word in a string that nothing else
+     * would notice going missing.
+     */
+    public function testCodeScrollsRatherThanWraps(): void {
+        $this->assertStringContainsString('textOverflow:"scroll"', $this->assets('dracula')->tags());
+    }
+
+    /**
+     * A sideways-scrolling block is one a thumb swipes in, and the swipe chains to the page once
+     * the code runs out - which is the back gesture on iOS and under Chrome's
+     */
+    public function testTheScrollDoesNotChainToThePage(): void {
+        $this->assertStringContainsString('overscroll-behavior-x:contain', CodeAssets::STYLE);
     }
 
     /**
