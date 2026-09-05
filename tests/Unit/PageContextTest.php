@@ -5,6 +5,12 @@ namespace Dynart\Dpress\Test\Unit;
 use Dynart\Dpress\Content\PageContext;
 use Dynart\Dpress\DpressServices;
 use Dynart\Dpress\Entity\Content;
+use Dynart\Micro\Session;
+use Dynart\Micro\Request;
+use Dynart\Dpress\Test\StubTranslation;
+use Dynart\Dpress\Test\RecordingEvents;
+use Dynart\Dpress\Form\FormFactory;
+use Dynart\Dpress\Form\AdminForms;
 use Dynart\Dpress\Entity\Setting;
 use Dynart\Dpress\Service\SettingFields;
 use Dynart\Dpress\Test\StubLogger;
@@ -117,6 +123,27 @@ class PageContextTest extends TestCase {
     public function testOnlyTheOnesThatBroughtAFieldAppearInTheFormFields(): void {
         $fields = $this->fields();
         $this->assertSame([], $fields->formFields());
+    }
+
+    /**
+     * And it reaches the Settings screen, which is the other half of "one call"
+     *
+     * The registry decides what is *written*; the form builder has to be handed the field or
+     * there is nothing on the screen to write from. Both halves or neither.
+     */
+    public function testARegisteredFieldReachesTheSettingsForm(): void {
+        $factory = new FormFactory(new Request(), new Session(), new RecordingEvents(), new StubTranslation());
+        AdminForms::register($factory);
+        $form = $factory->create(AdminForms::SETTINGS, [
+            'themes' => ['' => 'Built in'],
+            'registered_fields' => [
+                'disqus_shortname' => ['type' => 'text', 'label' => 'Disqus shortname',
+                                       'required' => false],
+            ],
+        ]);
+        $this->assertArrayHasKey('disqus_shortname', $form->fields());
+        // never required: one added by a plugin would stop anybody saving the screen
+        $this->assertFalse($form->required('disqus_shortname'));
     }
 
     /**
