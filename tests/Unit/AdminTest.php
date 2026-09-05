@@ -544,6 +544,36 @@ class AdminTest extends TestCase {
     }
 
     /**
+     * A checkbox that is turned off has to reach `save()` as a value, not as an absence
+     *
+     * A browser sends nothing at all for an unticked box. `save()` skips a setting that is not
+     * in the values, because that is how it says "this screen did not ask" - so unticking
+     * "Anybody may create an account" wrote nothing and registration stayed open, with the page
+     * reporting that it saved. `Form::bind()` fills the declared fields the request did not carry.
+     */
+    public function testAnUntickedSettingIsSavedAsOff(): void {
+        $form = $this->factory()->create(AdminForms::SETTINGS, ['themes' => ['' => 'Built in']]);
+        // what the browser posts with every box unticked: the text fields, and nothing else
+        $_REQUEST[AdminForms::SETTINGS] = ['site_name' => 'Test'];
+        $form->bind();
+        $values = $form->values();
+        foreach ([Setting::REGISTRATION_OPEN, Setting::AUTOLINK] as $name) {
+            $this->assertArrayHasKey($name, $values, "$name did not bind, so save() would skip it");
+            $this->assertFalse((bool)$values[$name], "$name should have bound as off");
+        }
+    }
+
+    /**
+     * And a field this form never had stays out, which is what `save()` skipping is *for*
+     */
+    public function testABoundFormDoesNotInventFieldsItNeverDeclared(): void {
+        $form = $this->factory()->create(AdminForms::CONTENT, ['is_page' => true]);
+        $_REQUEST[AdminForms::CONTENT] = ['title' => 'About'];
+        $form->bind();
+        $this->assertArrayNotHasKey('categories', $form->values());
+    }
+
+    /**
      * The logo and the icon are chosen from the library
      *
      * What used to argue against it - a logo is chrome, it renders on pages with no content on
