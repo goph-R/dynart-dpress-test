@@ -51,9 +51,14 @@ class SitemapTest extends TestCase {
             public function postPath(string $slug): string { return '/'.$slug; }
         };
         $taxonomy = new class($categories, $tags) extends TaxonomyService {
+            public array $tagContext = [];
             public function __construct(public array $cats, public array $tagRows) {}
             public function categories(array $context = []): array { return $this->cats; }
-            public function tagCloud(): array { return $this->tagRows; }
+            public function featuredTagSlug(): string { return 'featured'; }
+            public function tagCloud(array $context = []): array {
+                $this->tagContext = $context;
+                return $this->tagRows;
+            }
         };
         $router = $this->createMock(RouterInterface::class);
         $router->method('url')->willReturnCallback(
@@ -179,6 +184,18 @@ class SitemapTest extends TestCase {
     public function testTagsComeFromTheCloudSoUnusedOnesStayOut(): void {
         $locs = $this->locs($this->sitemap([], [], [['slug' => 'retro', 'total' => 3]]));
         $this->assertContains('https://example.com/tag/retro', $locs);
+    }
+
+    /**
+     * `featured` is machinery, and its archive is the front page's strip a second time -
+     * a thin duplicate is not what a sitemap should be pointing a crawler at
+     */
+    public function testTheFeaturedTagIsLeftOut(): void {
+        $sitemap = $this->sitemap([], [], [['slug' => 'retro', 'total' => 3]]);
+        $sitemap->urls();
+        $property = new \ReflectionProperty(Sitemap::class, 'taxonomy');
+        $property->setAccessible(true);
+        $this->assertSame('featured', $property->getValue($sitemap)->tagContext['exclude_slug'] ?? null);
     }
 
     // --- lastmod ---
