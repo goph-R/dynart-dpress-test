@@ -14,6 +14,8 @@ use Dynart\Dpress\Service\SettingFields;
 use Dynart\Dpress\Controller\Admin\TaxonomyAdminController;
 use Dynart\Dpress\Controller\Admin\UserAdminController;
 use Dynart\Dpress\Content\Dates;
+use Dynart\Dpress\Content\InternalLinks;
+use Dynart\Dpress\Content\MarkdownRenderer;
 use Dynart\Dpress\Dpress;
 use Dynart\Dpress\DpressServices;
 use Dynart\Dpress\DpressWebApp;
@@ -166,6 +168,48 @@ class AdminTest extends TestCase {
         foreach (array_keys(AssetController::ASSETS) as $name) {
             $this->assertFileExists(dirname(Dpress::viewsPath()).'/assets/'.$name);
         }
+    }
+
+    /**
+     * Every asset the package ships is actually on the page
+     *
+     * A file in `ASSETS` that no template asks for is a file being maintained for nobody, and it
+     * is the shape a rename leaves behind: the allowlist still serves the old name, the layout
+     * already asks for the new one, and nothing fails until somebody opens an editor.
+     */
+    public function testEveryServedScriptIsOnTheAdminPage(): void {
+        $layout = file_get_contents(Dpress::viewsPath().'/admin/layout.phtml');
+        foreach (array_keys(AssetController::ASSETS) as $name) {
+            if ($name === 'logo.svg') {
+                continue; // in the header, by the same helper, but not in the head
+            }
+            $this->assertStringContainsString(
+                "AssetController::url('".$name."')", $layout, "$name is served but never loaded"
+            );
+        }
+    }
+
+    /**
+     * The colouring in the editor has to agree with the renderer about where a post breaks
+     *
+     * `markdown-highlight.js` transcribes two rules it cannot call: `separatorLines()`, which
+     * decides which `---` cuts the document, and `InternalLinks::PATTERN`, which decides what
+     * `media#12` means. Nothing at runtime connects the two sides, so a prefix added in PHP would
+     * simply stop being coloured - the field would tell an author their link resolves to nothing
+     * on the day it started resolving. Grepping the file is crude and it is what catches that.
+     */
+    public function testTheHighlighterSpellsThisSitesSyntaxTheSameWay(): void {
+        $script = file_get_contents(Dpress::path('assets/markdown-highlight.js'));
+        $this->assertStringContainsString(
+            "var SEPARATOR = '".MarkdownRenderer::SEPARATOR."';", $script,
+            'the highlighter and the renderer disagree about what a separator is'
+        );
+        preg_match('/\(([a-z|]+)\)#/', InternalLinks::PATTERN, $php);
+        preg_match('/INTERNAL = \/\^\(([a-z|]+)\)#/', $script, $js);
+        $this->assertSame(
+            $php[1] ?? 'php', $js[1] ?? 'js',
+            'the highlighter colours a different set of internal references than the renderer resolves'
+        );
     }
 
     public function testEveryAdminControllerIsRegistered(): void {
