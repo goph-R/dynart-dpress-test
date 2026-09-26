@@ -725,6 +725,7 @@ class AdminTest extends TestCase {
             Setting::TIMEZONE,
             Setting::CODE_THEME,
             Setting::ADMIN_PAGES_THUMBNAIL,
+            Setting::ADMIN_EDITOR_CONTAIN_SCROLL,
         ], array_keys($this->settingFields()->types()));
     }
 

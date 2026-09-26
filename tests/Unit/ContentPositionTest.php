@@ -159,7 +159,8 @@ class ContentPositionTest extends TestCase {
 
     /**
      * A post moves among the posts of its weight, in the order the site lists them: the date
-     * under the position, drafts included so one keeps its place when it is published
+     * under the position, drafts included so one keeps its place when it is published - and the
+     * trash left out, since nothing in it is anywhere in that order
      */
     public function testAPostsGroupIsItsTypeAndWeightInTheSitesOrder(): void {
         $post = $this->post(10);
@@ -167,7 +168,8 @@ class ContentPositionTest extends TestCase {
         $this->service([10 => 0])->move($post, ContentService::MOVE_UP);
         $query = $this->db->matching('select `id`, `position`')[0];
         $this->assertStringContainsString('`weight` = :weight', $query['sql']);
-        $this->assertStringContainsString('`status` <> :autoDraft', $query['sql']);
+        $this->assertStringContainsString('`status` not in (:autoDraft, :trash)', $query['sql']);
+        $this->assertSame(Content::STATUS_TRASH, $query['params'][':trash']);
         $this->assertStringNotContainsString('parent_id', $query['sql']);
         $this->assertStringContainsString('order by `position` asc, `published_at` desc', $query['sql']);
         $this->assertSame(5, $query['params'][':weight']);
