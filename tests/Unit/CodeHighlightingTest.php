@@ -172,6 +172,16 @@ class CodeHighlightingTest extends TestCase {
     }
 
     /**
+     * The page loads the copy with Pascal in it, and that copy is there - a missing script is
+     * every code block on the site uncoloured
+     */
+    public function testThePageLoadsTheScriptWithTheAddedLanguages(): void {
+        $this->assertFileExists(dirname(Dpress::viewsPath()).'/assets/enlighter/'.CodeAssets::SCRIPT);
+        $this->assertStringContainsString('pascal:dpress_pascal',
+            (string)file_get_contents(dirname(Dpress::viewsPath()).'/assets/enlighter/'.CodeAssets::SCRIPT));
+    }
+
+    /**
      * Every theme paints the block's background on `.enlighter-default` and sets `padding: 0`, so
      * the code sits against the top and bottom edges of the colour. The correction is one class
      * against the theme's one class, which means **source order decides it** - and the theme's
