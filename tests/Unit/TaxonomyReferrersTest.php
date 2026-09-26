@@ -10,19 +10,10 @@ use Dynart\Dpress\Service\ContentService;
 use Dynart\Dpress\Service\TaxonomyService;
 use Dynart\Dpress\Test\RecordingEvents;
 use Dynart\Dpress\Test\StubConfig;
+use Dynart\Dpress\Test\SavingEntities;
 use Dynart\Dpress\Test\StubDatabase;
-use Dynart\Micro\Entities\Entity;
-use Dynart\Micro\Entities\EntityManager;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
-
-/**
- * An entity manager that keeps what it was asked to save, and writes nothing
- */
-class SavingEntities extends EntityManager {
-    public array $saved = [];
-    public function save(Entity $entity): void { $this->saved[] = $entity; }
-}
 
 /**
  * A `ContentService` whose only real part is the referrer path

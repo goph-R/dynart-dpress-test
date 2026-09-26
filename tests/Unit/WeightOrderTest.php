@@ -49,7 +49,8 @@ class WeightOrderTest extends TestCase {
         foreach (['contentList', 'contentByTag', 'contentByCategory'] as $builder) {
             $order = $this->queries->$builder([])->orderBy();
             $this->assertSame(['weight', 'desc'], $order[0] ?? null, "$builder does not order by weight");
-            $this->assertSame(['published_at', 'desc'], $order[1] ?? null, "$builder lost the date");
+            $this->assertSame(['position', 'asc'], $order[1] ?? null, "$builder lost the position");
+            $this->assertSame(['published_at', 'desc'], $order[2] ?? null, "$builder lost the date");
         }
     }
 
@@ -59,7 +60,7 @@ class WeightOrderTest extends TestCase {
      */
     public function testThePagesUnderAPageOrderByWeightThenByName(): void {
         $order = $this->queries->contentChildren(['parent_id' => 1])->orderBy();
-        $this->assertSame([['weight', 'desc'], ['title', 'asc']], $order);
+        $this->assertSame([['weight', 'desc'], ['position', 'asc'], ['title', 'asc']], $order);
     }
 
     /**

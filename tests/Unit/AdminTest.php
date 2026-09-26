@@ -387,7 +387,8 @@ class AdminTest extends TestCase {
     public function testEveryAdminFormIsRegistered(): void {
         $factory = $this->factory();
         foreach ([AdminForms::CONTENT, AdminForms::CATEGORY, AdminForms::TAG, AdminForms::MEDIA,
-                  AdminForms::USER, AdminForms::ROLE, AdminForms::SETTINGS, AdminForms::MENU,
+                  AdminForms::USER, AdminForms::ROLE, AdminForms::SETTINGS, AdminForms::THEME_SETTINGS,
+                  AdminForms::ADMIN_SETTINGS, AdminForms::MENU,
                   AdminForms::MENU_ITEM, AdminForms::UPLOAD, AdminForms::ACTION] as $name) {
             $this->assertTrue($factory->has($name), "the '$name' form is not registered");
         }
@@ -594,12 +595,51 @@ class AdminTest extends TestCase {
         return $fields;
     }
 
-    public function testTheSettingsFormCoversTheSettingsTheScreenWrites(): void {
-        $form = $this->factory()->create(AdminForms::SETTINGS, ['themes' => ['' => 'Built in']]);
+    /**
+     * The fields of each settings tab - Site, Theme, Admin
+     */
+    private function settingsTabs(): array {
+        return [
+            'site'  => $this->factory()->create(AdminForms::SETTINGS, [])->fields(),
+            'theme' => $this->factory()->create(AdminForms::THEME_SETTINGS, ['themes' => ['' => 'Built in']])->fields(),
+            'admin' => $this->factory()->create(AdminForms::ADMIN_SETTINGS, [])->fields(),
+        ];
+    }
+
+    /**
+     * Every setting the screen writes is on one of its tabs
+     */
+    public function testTheSettingsFormsCoverTheSettingsTheScreenWrites(): void {
+        $tabs = $this->settingsTabs();
         foreach (array_keys($this->settingFields()->types()) as $name) {
-            $this->assertArrayHasKey($name, $form->fields(), "the settings form has no '$name' field");
+            $on = array_filter($tabs, fn(array $fields) => isset($fields[$name]));
+            $this->assertNotEmpty($on, "no settings tab has a '$name' field");
         }
-        $this->assertArrayHasKey('theme', $form->fields());
+    }
+
+    /**
+     * **And on only one of them.** Each tab saves only the fields it carries, so a setting on two
+     * would be written by whichever was saved last - and a checkbox on a tab that is not being
+     * saved must not be read as unticked
+     */
+    public function testNoSettingIsOnTwoTabs(): void {
+        $tabs = array_values($this->settingsTabs());
+        for ($i = 0; $i < count($tabs); $i++) {
+            for ($j = $i + 1; $j < count($tabs); $j++) {
+                $this->assertSame([], array_keys(array_intersect_key($tabs[$i], $tabs[$j])));
+            }
+        }
+    }
+
+    /**
+     * Where each thing went: the look of the site on Theme, how the admin behaves on Admin
+     */
+    public function testTheThemeAndTheAdminSettingsHaveTabsOfTheirOwn(): void {
+        $tabs = $this->settingsTabs();
+        $this->assertArrayHasKey('theme', $tabs['theme']);
+        $this->assertArrayHasKey(Setting::CODE_THEME, $tabs['theme']);
+        $this->assertArrayNotHasKey('theme', $tabs['site']);
+        $this->assertArrayHasKey(Setting::ADMIN_PAGES_THUMBNAIL, $tabs['admin']);
     }
 
     /**
@@ -684,6 +724,7 @@ class AdminTest extends TestCase {
             Setting::DATE_FORMAT,
             Setting::TIMEZONE,
             Setting::CODE_THEME,
+            Setting::ADMIN_PAGES_THUMBNAIL,
         ], array_keys($this->settingFields()->types()));
     }
 
