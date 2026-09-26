@@ -3,7 +3,11 @@
 namespace Dynart\Dpress\Test\Unit;
 
 use Dynart\Dpress\Controller\Admin\ContentAdminController;
+use Dynart\Dpress\Entity\Content;
+use Dynart\Dpress\Entity\Role;
 use Dynart\Dpress\Entity\User;
+use Dynart\Dpress\Query\CoreQueries;
+use Dynart\Micro\Entities\EntityManager;
 use Dynart\Dpress\Form\AdminForms;
 use Dynart\Dpress\Form\FormFactory;
 use Dynart\Dpress\Migration\CreateSchema;
@@ -27,8 +31,12 @@ class AuthorController extends ContentAdminController {
         return $this->mayAssign;
     }
 
-    public function author(string $type, array $values): array {
-        return $this->authorData($type, $values);
+    public function author(string $type, array $values, ?Content $content = null): array {
+        return $this->authorData($type, $values, $content);
+    }
+
+    public function options(?Content $content = null): array {
+        return $this->authorOptions($content);
     }
 }
 
@@ -55,10 +63,16 @@ class ContentAuthorTest extends TestCase {
         return $factory;
     }
 
+    /** @var array the context the author list was last asked for with */
+    private array $askedWith = [];
+
     /**
-     * @param int[] $known the ids `findById()` answers for
+     * @param int[] $known   the ids `findById()` answers for - every account
+     * @param ?int[] $writers the ids holding an admin or editor role, which the list query answers;
+     *                        the same as `$known` unless said
      */
-    private function controller(array $known = [2]): AuthorController {
+    private function controller(array $known = [2], ?array $writers = null): AuthorController {
+        $writers ??= $known;
         $users = $this->createMock(UserService::class);
         $users->method('findById')->willReturnCallback(function (int $id) use ($known) {
             if (!in_array($id, $known, true)) {
@@ -66,7 +80,12 @@ class ContentAuthorTest extends TestCase {
             }
             $user = new User();
             $user->id = $id;
+            $user->name = 'user '.$id;
             return $user;
+        });
+        $users->method('findAll')->willReturnCallback(function (array $context) use ($writers) {
+            $this->askedWith = $context;
+            return array_map(fn(int $id) => ['id' => (string)$id, 'name' => 'user '.$id], $writers);
         });
         $controller = (new ReflectionClass(AuthorController::class))->newInstanceWithoutConstructor();
         $property = (new ReflectionClass(ContentAdminController::class))->getProperty('users');
@@ -113,6 +132,50 @@ class ContentAuthorTest extends TestCase {
         $this->assertSame([], $controller->author('post', ['author_id' => '999']));
         $this->assertSame([], $controller->author('post', ['author_id' => '0']));
         $this->assertSame([], $controller->author('post', ['author_id' => 'gopher']));
+    }
+
+    // --- who is offered ---
+
+    /**
+     * The people who write here - admins and editors - and not every reader with an account
+     */
+    public function testTheSelectOffersTheAdminsAndTheEditors(): void {
+        $controller = $this->controller([2, 3, 4], [2, 3]);
+        $this->assertSame([2 => 'user 2', 3 => 'user 3'], $controller->options());
+        $this->assertSame([Role::NAME_ADMIN, Role::NAME_EDITOR], $this->askedWith['role_names'] ?? null);
+    }
+
+    /**
+     * A reader's account exists, so it would save - but it was never in the select, and a post
+     * handed to somebody the select did not show is not a choice anybody made
+     */
+    public function testAnAccountThatIsNotAWriterIsNotAccepted(): void {
+        $controller = $this->controller([2, 4], [2]);
+        $this->assertSame([], $controller->author('post', ['author_id' => '4']));
+        $this->assertSame(['author_id' => 2], $controller->author('post', ['author_id' => '2']));
+    }
+
+    /**
+     * Whoever wrote the post stays in the list after losing the role, or the next save would
+     * quietly give the post to whoever is at the top
+     */
+    public function testThePostsOwnAuthorIsOfferedEvenWithoutTheRole(): void {
+        $controller = $this->controller([2, 4], [2]);
+        $post = new Content();
+        $post->author_id = 4;
+        $this->assertArrayHasKey(4, $controller->options($post));
+        $this->assertSame(['author_id' => 4], $controller->author('post', ['author_id' => '4'], $post));
+    }
+
+    public function testTheUserQueryKeepsToTheRolesAsked(): void {
+        $em = $this->createMock(EntityManager::class);
+        $em->method('safeTableName')->willReturnCallback(fn(string $class) => '`'.basename(str_replace('\\', '/', $class)).'`');
+        $query = (new CoreQueries($em))->userList(['role_names' => [Role::NAME_ADMIN, Role::NAME_EDITOR]]);
+        $sql = implode(' ', $query->conditions());
+        $this->assertStringContainsString('exists (select 1 from', $sql);
+        $this->assertStringContainsString('`r`.`name` in (:roleName0, :roleName1)', $sql);
+        $this->assertSame([Role::NAME_ADMIN, Role::NAME_EDITOR],
+            [$query->variables()[':roleName0'], $query->variables()[':roleName1']]);
     }
 
     public function testSomebodyWhoMayNotReassignChangesNothing(): void {

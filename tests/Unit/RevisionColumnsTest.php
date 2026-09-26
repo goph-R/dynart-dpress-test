@@ -35,11 +35,23 @@ class RevisionColumnsTest extends TestCase {
         'views/admin/content/history.phtml'      => 'revisions',
     ];
 
+    /**
+     * template => the keys a controller adds to each row after the query
+     *
+     * Named here one by one rather than excused wholesale: the point of this test is that a key
+     * nothing supplies is a blank cell, and a key added in PHP is supplied - but only if
+     * somebody said where.
+     */
+    private const ADDED = [
+        // `DashboardController::recent()`: the pen into the editor and the eye onto the page
+        'views/admin/dashboard.phtml' => ['edit_url', 'view_url'],
+    ];
+
     public function testEveryRevisionTemplateAsksForColumnsItsQueryAnswersTo(): void {
         foreach (self::SCREENS as $template => $method) {
             $asked = $this->columnsReadBy($template);
             $this->assertNotEmpty($asked, "$template stopped reading revision rows, or this regex did");
-            $available = $this->columnsSelectedBy($method);
+            $available = array_merge($this->columnsSelectedBy($method), self::ADDED[$template] ?? []);
             foreach ($asked as $column) {
                 $this->assertContains(
                     $column, $available,
