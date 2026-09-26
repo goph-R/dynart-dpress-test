@@ -8,6 +8,8 @@ use Dynart\Dpress\Service\BlockService;
 use Dynart\Dpress\Service\MenuService;
 use Dynart\Dpress\Test\RecordingEvents;
 use Dynart\Dpress\Theme\Places;
+use Dynart\Micro\EventService;
+use Dynart\Micro\EventServiceInterface;
 use Dynart\Micro\ViewInterface;
 use PHPUnit\Framework\TestCase;
 
@@ -29,7 +31,8 @@ class PlacesTest extends TestCase {
 
     private array $fetched = [];
 
-    private function places(array $blocks, string $renders = '<p>x</p>', array $menuItems = []): Places {
+    private function places(array $blocks, string $renders = '<p>x</p>', array $menuItems = [],
+                            ?EventServiceInterface $events = null): Places {
         $menus = $this->getMockBuilder(MenuService::class)->disableOriginalConstructor()->getMock();
         $menus->method('tree')->willReturn($menuItems);
 
@@ -44,7 +47,7 @@ class PlacesTest extends TestCase {
             $this->fetched[] = $variables;
             return '<'.$template.'>';
         });
-        return new Places($menus, $service, $types, $view, new RecordingEvents());
+        return new Places($menus, $service, $types, $view, $events ?? new RecordingEvents());
     }
 
     private function block(string $type, string $title = ''): Block {
@@ -107,5 +110,20 @@ class PlacesTest extends TestCase {
         $places = $this->places(['sidebar' => [$this->block('markdown')]]);
         $this->assertSame('', $places->blocks('footer'));
         $this->assertNotSame('', $places->blocks('sidebar'));
+    }
+
+    /**
+     * A listener gets the blocks by reference and may take some out for this page - how the
+     * Docs plugin leaves its tree alone in the sidebar of a documentation page
+     */
+    public function testAListenerMayTakeBlocksOut(): void {
+        $events = new EventService();
+        $events->subscribe(BlockService::EVENT_BEFORE_RENDER, function (string $place, array &$blocks): void {
+            $blocks = array_filter($blocks, fn(Block $block) => $block->type !== 'tag_cloud');
+        });
+        $places = $this->places(['sidebar' => [$this->block('tag_cloud'), $this->block('markdown')]],
+                                '<p>x</p>', [], $events);
+        $places->blocks('sidebar');
+        $this->assertSame(['markdown'], array_column($this->fetched[0]['blocks'], 'type'));
     }
 }
