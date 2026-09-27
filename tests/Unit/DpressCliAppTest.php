@@ -109,6 +109,17 @@ class DpressCliAppTest extends TestCase {
         $this->assertFalse(DpressCliApp::commandNeedsConfig('nosuchcommand'));
     }
 
+    /**
+     * What `bin/dpress` asks before letting a command start without a site: a plugin's command
+     * is not the core's, and outside a site it is stopped rather than run half configured
+     */
+    public function testOnlyTheCoresOwnCommandsAreCoreCommands(): void {
+        $this->assertTrue(DpressCliApp::isCoreCommand('install'));
+        $this->assertTrue(DpressCliApp::isCoreCommand('help'));
+        $this->assertFalse(DpressCliApp::isCoreCommand('docs:build'));
+        $this->assertFalse(DpressCliApp::isCoreCommand(null));
+    }
+
     public function testNoCommandNeedsNoConfig(): void {
         $this->assertFalse(DpressCliApp::commandNeedsConfig(null));
     }
