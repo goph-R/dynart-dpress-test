@@ -727,6 +727,7 @@ class AdminTest extends TestCase {
             Setting::CODE_THEME,
             Setting::ADMIN_PAGES_THUMBNAIL,
             Setting::ADMIN_EDITOR_CONTAIN_SCROLL,
+            Setting::ADMIN_EDITOR_COLUMNS,
         ], array_keys($this->settingFields()->types()));
     }
 

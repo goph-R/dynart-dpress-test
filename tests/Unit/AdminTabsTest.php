@@ -59,7 +59,7 @@ class AdminTabsTest extends TestCase {
 
     public function testSettingsHasASiteAThemeAndAnAdminTab(): void {
         $tabs = (new TabbedSettings($this->router()))->tabsFor(SettingsAdminController::TAB_THEME);
-        $this->assertSame(['Site', 'Theme', 'Admin'], array_column($tabs, 'label'));
+        $this->assertSame(['Site', 'Theme', 'Admin UI'], array_column($tabs, 'label'));
         $this->assertSame([
             'https://example.com/admin/settings',
             'https://example.com/admin/settings/theme',
