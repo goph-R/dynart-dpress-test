@@ -725,6 +725,7 @@ class AdminTest extends TestCase {
             Setting::DATE_FORMAT,
             Setting::TIMEZONE,
             Setting::CODE_THEME,
+            Setting::SITE_CSS,
             Setting::ADMIN_PAGES_THUMBNAIL,
             Setting::ADMIN_EDITOR_CONTAIN_SCROLL,
             Setting::ADMIN_EDITOR_COLUMNS,

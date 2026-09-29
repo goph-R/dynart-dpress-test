@@ -180,6 +180,22 @@ class FormSectionTest extends TestCase {
         $this->assertStringContainsString('<\/style><script>alert(1)<\/script>', $style);
     }
 
+    /** the whole site's Additional CSS (0.90.0): the same element, told apart by its marker */
+    public function testTheSitesCssIsTheSameElementWithItsOwnMarker(): void {
+        $this->assertSame(
+            '<style data-site-css>body { color: red; }</style>',
+            AbstractController::contentStyle('body { color: red; }', 'data-site-css')
+        );
+        $this->assertSame(1, substr_count(AbstractController::contentStyle('a{} </style>', 'data-site-css'), '</style'));
+    }
+
+    /** on the Theme tab, as the same code editor a post's CSS box is */
+    public function testTheThemeTabHasTheSitesCss(): void {
+        $fields = $this->factory()->create(AdminForms::THEME_SETTINGS, [])->fields();
+        $this->assertSame('textarea', $fields['site_css']['type'] ?? null);
+        $this->assertSame('css', $fields['site_css']['attributes']['data-code'] ?? null);
+    }
+
     public function testANewPostHasNoCss(): void {
         $this->assertNull((new Content())->css);
     }
