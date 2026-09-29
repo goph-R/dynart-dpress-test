@@ -126,8 +126,8 @@ class RevisionRestoreTest extends TestCase {
         $this->assertSame('checkbox', $fields[Setting::ADMIN_EDITOR_CONTAIN_SCROLL]['type'] ?? null);
         // the stylesheet only contains the wheel under the body class the setting turns on
         $css = file_get_contents(dirname(__DIR__, 3).'/dynart-dpress/assets/admin.css');
-        $this->assertStringContainsString('body.editor-contain-scroll textarea.markdown-editor { overscroll-behavior: contain; }', $css);
+        $this->assertStringContainsString('body.editor-contain-scroll textarea.code-editor { overscroll-behavior: contain; }', $css);
         // and the field's own rule does not do it unconditionally any more
-        $this->assertDoesNotMatchRegularExpression('/^textarea\.markdown-editor \{[^}]*overscroll-behavior/m', $css);
+        $this->assertDoesNotMatchRegularExpression('/^textarea\.(markdown|code)-editor \{[^}]*overscroll-behavior/m', $css);
     }
 }
