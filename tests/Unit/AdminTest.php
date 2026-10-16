@@ -729,7 +729,60 @@ class AdminTest extends TestCase {
             Setting::ADMIN_PAGES_THUMBNAIL,
             Setting::ADMIN_EDITOR_CONTAIN_SCROLL,
             Setting::ADMIN_EDITOR_COLUMNS,
+            Setting::ADMIN_THEME,
         ], array_keys($this->settingFields()->types()));
+    }
+
+    /**
+     * The Colour scheme field offers the three states, and `system` is one of them
+     *
+     * A select rather than a checkbox because there are three answers and only one of them is
+     * "whatever the machine says". `system` has to be on the list as a word: an empty value is
+     * read as absent by `SettingService::get()` and answers with the default, which is the
+     * reason the code theme spells "off" as `none` rather than ''.
+     */
+    public function testTheColourSchemeFieldOffersTheThreeStates(): void {
+        $fields = $this->factory()->create(AdminForms::ADMIN_SETTINGS, [
+            'admin_themes' => [
+                Setting::ADMIN_THEME_SYSTEM => 'Follow the operating system',
+                Setting::ADMIN_THEME_LIGHT  => 'Light',
+                Setting::ADMIN_THEME_DARK   => 'Dark',
+            ],
+        ])->fields();
+        $this->assertArrayHasKey(Setting::ADMIN_THEME, $fields);
+        $this->assertSame('select', $fields[Setting::ADMIN_THEME]['type']);
+        $this->assertSame([
+            Setting::ADMIN_THEME_SYSTEM,
+            Setting::ADMIN_THEME_LIGHT,
+            Setting::ADMIN_THEME_DARK,
+        ], array_keys($fields[Setting::ADMIN_THEME]['options']));
+    }
+
+    /**
+     * Only Light and Dark override the machine; everything else leaves it alone
+     *
+     * The rule `AbstractAdminController::adminTheme()` answers with, exercised here without a
+     * container behind it - the way `coerce()` above stands in for the controller's save `match`.
+     * **`system` must come back as ''**, not as itself: the layout writes `data-theme` only for a
+     * non-empty answer, and `data-theme="system"` is an attribute nothing styles, so the admin
+     * would fall to the stylesheet's bare `:root` - the light palette - and a dark desktop would
+     * be ignored by the setting that claims to be following it. A value no version ever wrote is
+     * read the same way, because a hand-edited row must not be able to half-apply a scheme.
+     */
+    public function testOnlyLightAndDarkOverrideTheMachinesColourScheme(): void {
+        $this->assertSame([Setting::ADMIN_THEME_LIGHT, Setting::ADMIN_THEME_DARK], Setting::ADMIN_THEME_OVERRIDES);
+        $this->assertSame('light', $this->themeOverride(Setting::ADMIN_THEME_LIGHT));
+        $this->assertSame('dark', $this->themeOverride(Setting::ADMIN_THEME_DARK));
+        $this->assertSame('', $this->themeOverride(Setting::ADMIN_THEME_SYSTEM));
+        $this->assertSame('', $this->themeOverride(''));
+        // the match is exact: a capitalised word is an attribute value no rule selects
+        $this->assertSame('', $this->themeOverride('Dark'));
+        $this->assertSame('', $this->themeOverride('solarized'));
+    }
+
+    private function themeOverride(string $value): string {
+        // the same check the controller makes, over the same constant
+        return in_array($value, Setting::ADMIN_THEME_OVERRIDES, true) ? $value : '';
     }
 
     /**
