@@ -6,8 +6,10 @@ use Dynart\Dpress\Controller\Admin\ContentAdminController;
 use Dynart\Dpress\Entity\Content;
 use Dynart\Dpress\Entity\ContentAttachment;
 use Dynart\Dpress\Entity\Media;
+use Dynart\Dpress\Media\MediaUsage;
 use Dynart\Dpress\Query\CoreQueries;
 use Dynart\Dpress\Service\MediaService;
+use Dynart\Dpress\Test\RecordingEvents;
 use Dynart\Dpress\Test\StubDatabase;
 use Dynart\Micro\Entities\EntityManager;
 use Dynart\Micro\Attribute\Route;
@@ -129,15 +131,34 @@ class AttachmentsTest extends TestCase {
     }
 
     /**
-     * `MediaService` takes ten collaborators and this exercises two of them
+     * A plugin that keeps a media id in a table of its own says so, or its file looks unused
+     *
+     * The music plugin's tracks were the first: an mp3 a track plays is in no attachment row and
+     * in no markdown, so the purge warning counted it as nothing.
      */
-    private function serviceWith(StubDatabase $db): MediaService {
+    public function testAPluginCanAddItsOwnReferencesToTheCount(): void {
+        $db = new StubDatabase();
+        $db->column = ['4'];
+        $events = new RecordingEvents();
+        $events->subscribe(MediaService::EVENT_USAGE_COUNTED, function (MediaUsage $usage) {
+            $this->assertSame(12, $usage->mediaId());
+            $usage->add(2);
+            $usage->add(-5);   // adding is the only direction there is
+        });
+
+        $this->assertSame(3, $this->serviceWith($db, $events)->usageCount(12));
+    }
+
+    /**
+     * `MediaService` takes ten collaborators and this exercises three of them
+     */
+    private function serviceWith(StubDatabase $db, ?RecordingEvents $events = null): MediaService {
         $em = $this->createMock(EntityManager::class);
         $em->method('safeTableName')->willReturnCallback(
             fn(string $className) => $className === Content::class ? '`dp_content`' : '`content_attachment`'
         );
         $service = (new ReflectionClass(MediaService::class))->newInstanceWithoutConstructor();
-        foreach (['em' => $em, 'db' => $db] as $name => $value) {
+        foreach (['em' => $em, 'db' => $db, 'events' => $events ?? new RecordingEvents()] as $name => $value) {
             $property = (new ReflectionClass(MediaService::class))->getProperty($name);
             $property->setAccessible(true);
             $property->setValue($service, $value);
